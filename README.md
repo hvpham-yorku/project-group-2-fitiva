@@ -27,7 +27,7 @@ docker compose up --build
 ## Stop containers
 docker compose down
 
-## Stop + delete DB data (reset)
+## Stop + delete DB data (DB reset)
 docker compose down -v
 
 ## Run Django migrations manually (if needed)
@@ -37,7 +37,7 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 
 # Repo Structure
-frontend/ Next.js app
-backend/ Django project
-docker-compose.yml dev orchestration
-log.md progress + decisions (required for ITR1)
+- frontend/ Next.js app
+- backend/ Django project
+- docker-compose.yml dev orchestration
+- log.md progress + decisions (required for ITR1)
