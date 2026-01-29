@@ -15,6 +15,7 @@ Fitiva is a web app for personalized workout planning (users + trainers).
 ## Quick Start (recommended)
 ```bash
 docker compose up --build
+```
 
 ## URLs to use
 
