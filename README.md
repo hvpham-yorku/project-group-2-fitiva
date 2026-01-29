@@ -18,27 +18,25 @@ docker compose up --build
 ```
 
 ## URLs to use
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000
+- Django Admin: http://localhost:8000/admin
 
-Frontend: http://localhost:3000
-Backend: http://localhost:8000
-Django Admin: http://localhost:8000/admin
+# Useful Commands
 
-## Useful Commands
-
-# Stop containers
+## Stop containers
 docker compose down
 
-# Stop + delete DB data (reset)
+## Stop + delete DB data (reset)
 docker compose down -v
 
-# Run Django migrations manually (if needed)
+## Run Django migrations manually (if needed)
 docker compose exec backend python manage.py migrate
 
-# Create admin user
+## Create admin user
 docker compose exec backend python manage.py createsuperuser
 
-## Repo Structure
-
+# Repo Structure
 frontend/ Next.js app
 backend/ Django project
 docker-compose.yml dev orchestration
