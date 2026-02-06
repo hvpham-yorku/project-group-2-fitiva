@@ -2,24 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import './dashboard.css';
 
 export default function DashboardPage() {
-  const { user, logout, isLoading, checkAuth } = useAuth();
-  const router = useRouter();
+  const { user, logout, isLoading } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Redirect non-trainer users with incomplete profile (no age) to profile page
-  useEffect(() => {
-    if (!user || isLoading || user.is_trainer) return;
-    const profile = user.profile;
-    if (profile && profile.age != null) return;
-    router.replace('/profile');
-  }, [user, isLoading, router]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -66,7 +56,7 @@ export default function DashboardPage() {
     <div className="dashboard-container">
       {/* Header */}
       <header className="dashboard-header">
-        <Link href="/" className="dashboard-logo">Fitiva</Link>
+        <div className="dashboard-logo">Fitiva</div>
         <nav className="dashboard-nav">
           {/* User Menu with Dropdown */}
           <div className="user-menu" ref={dropdownRef}>
@@ -119,12 +109,12 @@ export default function DashboardPage() {
                 </li>
                 <li>
                   <Link 
-                    href="/programs" 
+                    href="/settings" 
                     className="dropdown-menu-item"
                     onClick={() => setIsDropdownOpen(false)}
                   >
-                    <span className="menu-item-icon">💪</span>
-                    <span>Programs</span>
+                    <span className="menu-item-icon">⚙️</span>
+                    <span>Settings</span>
                   </Link>
                 </li>
                 {user.is_trainer && (
@@ -214,32 +204,40 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Quick Actions - one link per feature */}
+        {/* Quick Actions */}
         <section className="quick-actions">
           <h2 className="section-title">Quick Actions</h2>
           <div className="action-buttons">
             <Link href="/profile" className="action-button">
               <div className="action-button-icon">👤</div>
-              <div className="action-button-title">Profile</div>
+              <div className="action-button-title">Complete Profile</div>
               <div className="action-button-description">
-                Your fitness profile and preferences
+                Add your fitness details to get started
               </div>
             </Link>
 
-            <Link href="/programs" className="action-button">
-              <div className="action-button-icon">💪</div>
-              <div className="action-button-title">Programs</div>
+            <Link href="/recommendations" className="action-button">
+              <div className="action-button-icon">🎯</div>
+              <div className="action-button-title">View Recommendations</div>
               <div className="action-button-description">
-                Browse and discover workout programs
+                Discover workout plans for you
+              </div>
+            </Link>
+
+            <Link href="/trainer-programs" className="action-button">
+              <div className="action-button-icon">💪</div>
+              <div className="action-button-title">Browse Programs</div>
+              <div className="action-button-description">
+                Explore trainer-created workouts
               </div>
             </Link>
 
             {user.is_trainer && (
-              <Link href="/my-programs" className="action-button">
-                <div className="action-button-icon">📋</div>
-                <div className="action-button-title">My Programs</div>
+              <Link href="/create-program" className="action-button">
+                <div className="action-button-icon">✨</div>
+                <div className="action-button-title">Create Program</div>
                 <div className="action-button-description">
-                  Manage and create your workout programs
+                  Design a new workout plan
                 </div>
               </Link>
             )}
