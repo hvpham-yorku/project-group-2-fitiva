@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Alert from '@/components/ui/Alert';
-import { ApiError } from '@/lib/api';
+import { ApiError } from '@/library/api';
 import './login.css';
 
 export default function LoginPage() {
