@@ -1,6 +1,10 @@
 .profile-container {
   min-height: 100vh;
-  background-color: #f9fafb;
+  background: linear-gradient(
+    180deg,
+    #eef6ff 0%,
+    #f5faff 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8,71 +12,86 @@
 }
 
 .profile-card {
-  width: 100%;
-  max-width: 520px;
-  background-color: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08);
-  padding: 2rem;
+  background-color: #ffffff;
+  padding: 2.5rem;
+  border-radius: 0.9rem;
+  box-shadow:
+    0 12px 30px rgba(59, 130, 246, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.04);
 }
 
 .profile-header {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
 }
 
 .profile-title {
   font-size: 1.75rem;
   font-weight: 800;
-  color: #111827;
-  margin: 0 0 0.25rem 0;
+  color: #1e3a8a;
+  margin: 0 0 0.3rem 0;
 }
 
 .profile-subtitle {
   font-size: 0.9rem;
-  color: #6b7280;
-  margin: 0 0 0.75rem 0;
+  color: #475569;
+  margin: 0 0 0.9rem 0;
 }
 
 .profile-back {
   display: inline-block;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   color: #2563eb;
   text-decoration: none;
+  font-weight: 500;
+}
+
+.profile-back:hover {
+  text-decoration: underline;
 }
 
 .profile-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .profile-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .profile-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #111827;
+  color: #1e293b;
 }
 
 .profile-input,
 .profile-select {
   width: 100%;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.8rem 0.9rem;
+
+  border-radius: 0.6rem;
+  border: 1px solid #c7d2fe;
+
+  background-color: #f8fbff;
+  color: #0f172a;
+
   font-size: 0.95rem;
-  background-color: white;
+  font-weight: 500;
+}
+
+.profile-input::placeholder {
+  color: #94a3b8;
 }
 
 .profile-input:focus,
 .profile-select:focus {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+  outline: none;
+  border-color: #3b82f6;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }
 
 .profile-error {
@@ -81,16 +100,29 @@
 }
 
 .profile-button {
-  margin-top: 0.5rem;
+  margin-top: 1.2rem;
   width: 100%;
   border: none;
-  border-radius: 0.5rem;
-  padding: 0.8rem 1rem;
+  border-radius: 0.65rem;
+  padding: 0.9rem 1rem;
+
   font-size: 0.95rem;
   font-weight: 700;
-  background-color: #2563eb;
+
+  background: linear-gradient(
+    135deg,
+    #3b82f6,
+    #2563eb
+  );
+
   color: white;
   cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.profile-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
 }
 
 .profile-button:disabled {
@@ -100,14 +132,14 @@
 
 .profile-alert {
   padding: 0.75rem;
-  border-radius: 0.5rem;
+  border-radius: 0.6rem;
   font-size: 0.9rem;
 }
 
 .profile-alert.success {
-  background-color: #ecfdf5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  background-color: #ecfeff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
 
 .profile-alert.error {
@@ -118,7 +150,11 @@
 
 .profile-loading {
   min-height: 100vh;
-  background-color: #f9fafb;
+  background: linear-gradient(
+    180deg,
+    #eef6ff 0%,
+    #f5faff 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,7 +163,7 @@
 .profile-spinner {
   width: 3rem;
   height: 3rem;
-  border: 4px solid #e5e7eb;
+  border: 4px solid #c7d2fe;
   border-top-color: #2563eb;
   border-radius: 50%;
   animation: spin 1s linear infinite;
