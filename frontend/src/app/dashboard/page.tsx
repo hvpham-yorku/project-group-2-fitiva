@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import './dashboard.css';
+import Logo from '@/components/ui/Logo';
 
 export default function DashboardPage() {
   const { user, logout, isLoading } = useAuth();
@@ -56,7 +57,9 @@ export default function DashboardPage() {
     <div className="dashboard-container">
       {/* Header */}
       <header className="dashboard-header">
-        <div className="dashboard-logo">Fitiva</div>
+        <div className="dashboard-logo">
+            <Logo variant="text" size="sm" />
+        </div>
         <nav className="dashboard-nav">
           {/* User Menu with Dropdown */}
           <div className="user-menu" ref={dropdownRef}>
@@ -103,7 +106,6 @@ export default function DashboardPage() {
                     className="dropdown-menu-item"
                     onClick={() => setIsDropdownOpen(false)}
                   >
-                    <span className="menu-item-icon"></span>
                     <span>Profile</span>
                   </Link>
                 </li>
@@ -113,7 +115,6 @@ export default function DashboardPage() {
                     className="dropdown-menu-item"
                     onClick={() => setIsDropdownOpen(false)}
                   >
-                    <span className="menu-item-icon"></span>
                     <span>Settings</span>
                   </Link>
                 </li>
@@ -124,7 +125,7 @@ export default function DashboardPage() {
                       className="dropdown-menu-item"
                       onClick={() => setIsDropdownOpen(false)}
                     >
-                      <span className="menu-item-icon"></span>
+                      <span className="menu-item-icon">📋</span>
                       <span>My Programs</span>
                     </Link>
                   </li>
@@ -136,7 +137,6 @@ export default function DashboardPage() {
                     disabled={isLoggingOut}
                     className="dropdown-menu-item danger"
                   >
-                    <span className="menu-item-icon"></span>
                     <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
                   </button>
                 </li>
@@ -151,7 +151,7 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <section className="welcome-section">
           <h1 className="welcome-title">
-            Welcome back, {user.first_name}! 
+            Welcome back, {user.first_name}! 👋
           </h1>
           <p className="welcome-subtitle">
             {user.is_trainer 
@@ -161,12 +161,14 @@ export default function DashboardPage() {
           <div className="welcome-message">
             {user.is_trainer ? (
               <>
-                <strong> Trainer Dashboard:</strong> Manage your workout programs, track client progress, 
+                <span style={{ fontSize: '1.25rem', marginRight: '0.25rem' }}>🎯</span>
+                <strong>Trainer Journey:</strong> Manage your workout programs, track client progress, 
                 and share your expertise with the Fitiva community.
               </>
             ) : (
               <>
-                <strong> Your Fitness Journey:</strong> Complete your profile to get personalized workout 
+                <span style={{ fontSize: '1.25rem', marginRight: '0.25rem' }}>🎯</span>
+                <strong>Your Fitness Journey:</strong> Complete your profile to get personalized workout 
                 recommendations tailored to your goals and experience level.
               </>
             )}
@@ -176,28 +178,28 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <section className="stats-grid">
           <div className="stat-card">
-            <div className="stat-icon blue"></div>
+            <div className="stat-icon blue">📊</div>
             <div className="stat-label">Total Workouts</div>
             <div className="stat-value">0</div>
             <div className="stat-subtext">Start your first workout today!</div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon green"></div>
+            <div className="stat-icon green">🔥</div>
             <div className="stat-label">Current Streak</div>
             <div className="stat-value">0 days</div>
             <div className="stat-subtext">Build consistency!</div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon purple">⏱</div>
+            <div className="stat-icon purple">⏱️</div>
             <div className="stat-label">Total Time</div>
             <div className="stat-value">0 min</div>
             <div className="stat-subtext">Every minute counts</div>
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon orange"></div>
+            <div className="stat-icon orange">🏆</div>
             <div className="stat-label">Achievements</div>
             <div className="stat-value">0</div>
             <div className="stat-subtext">Unlock your first badge!</div>
@@ -209,7 +211,7 @@ export default function DashboardPage() {
           <h2 className="section-title">Quick Actions</h2>
           <div className="action-buttons">
             <Link href="/profile" className="action-button">
-              <div className="action-button-icon"></div>
+              <div className="action-button-icon">👤</div>
               <div className="action-button-title">Complete Profile</div>
               <div className="action-button-description">
                 Add your fitness details to get started
@@ -217,7 +219,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link href="/recommendations" className="action-button">
-              <div className="action-button-icon"></div>
+              <div className="action-button-icon">🎯</div>
               <div className="action-button-title">View Recommendations</div>
               <div className="action-button-description">
                 Discover workout plans for you
@@ -225,7 +227,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link href="/trainer-programs" className="action-button">
-              <div className="action-button-icon"></div>
+              <div className="action-button-icon">💪</div>
               <div className="action-button-title">Browse Programs</div>
               <div className="action-button-description">
                 Explore trainer-created workouts
@@ -234,7 +236,7 @@ export default function DashboardPage() {
 
             {user.is_trainer && (
               <Link href="/create-program" className="action-button">
-                <div className="action-button-icon"></div>
+                <div className="action-button-icon">✨</div>
                 <div className="action-button-title">Create Program</div>
                 <div className="action-button-description">
                   Design a new workout plan
