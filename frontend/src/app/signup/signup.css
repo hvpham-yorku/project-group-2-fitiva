@@ -1,3 +1,5 @@
+/* ALL CSS CODE IS GEN AI FROM CLAUDE SONNET 4.5 AFTER GIVING IT A FIGMA/HAND-DRAWN DESIGN SKETCH */
+
 /* Split-screen container */
 .signup-container {
   display: flex;
@@ -6,7 +8,7 @@
   overflow: hidden;
 }
 
-/* Left Side - Gym Image (50% width) */
+/* Left Side - Gym Image */
 .signup-left {
   position: relative;
   flex: 1;
@@ -59,7 +61,7 @@
   text-transform: uppercase;
 }
 
-/* Right Side - Form (50% width) - ULTRA MICRO */
+/* Right Side - Form */
 .signup-right {
   flex: 1;
   display: flex;
@@ -80,7 +82,7 @@
   padding-bottom: 7.8rem;
 }
 
-/* Logo - TINY */
+/* Logo */
 .logo-container {
   margin-bottom: 0.25rem;
   text-align: center;
@@ -88,14 +90,14 @@
   padding-top: 1rem;
 }
 
-/* Header - TINY */
+/* Header */
 .signup-header {
   text-align: center;
   margin-bottom: 0.4rem;
   margin-top: 1rem;
 }
 
-/* Gradient title - TINY */
+/* Gradient title */
 .signup-title {
   background: linear-gradient(90deg, #EF3E36 0%, #FF9234 100%);
   -webkit-background-clip: text;
@@ -123,7 +125,7 @@
   text-decoration: underline;
 }
 
-/* Alerts - TINY */
+/* Alerts   */
 .alert {
   padding: 0.35rem;
   border-radius: 0.3rem;
@@ -213,7 +215,7 @@
   position: relative;
 }
 
-/* Checkbox - TINY */
+/* Checkbox   */
 .checkbox-group {
   display: flex;
   align-items: center;
@@ -236,7 +238,7 @@
   transition: color 0.3s ease;
 }
 
-/* Trainer fields - TINY */
+/* Trainer fields */
 .trainer-fields {
   margin-top: 0.3rem;
   padding-top: 0.3rem;
@@ -291,7 +293,7 @@
   transition: color 0.3s ease;
 }
 
-/* Specialties grid - TINY */
+/* Specialties grid */
 .specialties-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -320,7 +322,7 @@
   transition: color 0.3s ease;
 }
 
-/* Submit button - TINY */
+/* Submit button */
 .submit-button {
   width: 100%;
   padding: 0.45rem;

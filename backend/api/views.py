@@ -12,7 +12,7 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import UserSignupSerializer, UserLoginSerializer, UserSerializer, UserProfileSerializer
+from .serializers import TrainerProfileSerializer, UserSignupSerializer, UserLoginSerializer, UserSerializer, UserProfileSerializer
 from .models import UserProfile
 from .authentication import CsrfExemptSessionAuthentication
 import os
@@ -225,3 +225,143 @@ def password_reset(_request):
 
 
     return Response({"ok": True})
+
+# Public Profile View (can view any user's profile)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])  # Must be logged in to view profiles
+def get_public_profile(request, user_id):
+    """
+    Get public profile for any user (trainer or regular user)
+    Returns basic info + trainer profile if they're a trainer
+    """
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Check if viewing own profile
+    is_owner = request.user.id == user.id
+    
+    # Get user profile
+    user_profile = None
+    try:
+        profile = user.profile
+        user_profile = {
+            "age": profile.age,
+            "experience_level": profile.experience_level,
+            "training_location": profile.training_location,
+            "fitness_focus": profile.fitness_focus,
+        }
+    except UserProfile.DoesNotExist:
+        pass
+    
+    # Get trainer profile if user is a trainer
+    trainer_profile = None
+    if user.is_trainer:
+        try:
+            t_profile = user.trainer_profile
+            trainer_profile = TrainerProfileSerializer(t_profile).data
+        except:
+            pass
+    
+    return Response({
+        "id": user.id,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email if is_owner else None,  # Only show email to owner
+        "is_trainer": user.is_trainer,
+        "is_owner": is_owner,
+        "user_profile": user_profile,
+        "trainer_profile": trainer_profile,
+    }, status=status.HTTP_200_OK)
+
+
+# Get Trainer's Programs
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_trainer_programs(request, user_id):
+    """
+    Get all workout programs created by a specific trainer
+    """
+    try:
+        user = User.objects.get(id=user_id, is_trainer=True)
+    except User.DoesNotExist:
+        return Response(
+            {"detail": "Trainer not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    from .models import WorkoutPlan
+    programs = WorkoutPlan.objects.filter(trainer=user).order_by('-created_at')
+    
+    programs_data = []
+    for program in programs:
+        programs_data.append({
+            "id": program.id,
+            "name": program.name,
+            "description": program.description,
+            "focus": program.focus,
+            "difficulty": program.difficulty,
+            "weekly_frequency": program.weekly_frequency,
+            "session_length": program.session_length,
+            "is_subscription": program.is_subscription,
+            "created_at": program.created_at.isoformat(),
+            "updated_at": program.updated_at.isoformat(),
+        })
+    
+    return Response({
+        "programs": programs_data,
+        "total_count": len(programs_data)
+    }, status=status.HTTP_200_OK)
+
+
+# Update Trainer Profile
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_trainer_profile(request):
+    """
+    Update trainer profile (only trainers can update their own profile)
+    """
+    if not request.user.is_trainer:
+        return Response(
+            {"detail": "Only trainers can update trainer profiles"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        trainer_profile = request.user.trainer_profile
+    except:
+        return Response(
+            {"detail": "Trainer profile not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    serializer = TrainerProfileSerializer(
+        trainer_profile, 
+        data=request.data, 
+        partial=True
+    )
+    
+    try:
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except ValidationError as e:
+        formatted_errors = {}
+        if isinstance(e.detail, dict):
+            for field, errors in e.detail.items():
+                if isinstance(errors, list):
+                    formatted_errors[field] = errors[0]
+                else:
+                    formatted_errors[field] = str(errors)
+        else:
+            formatted_errors["detail"] = str(e.detail)
+        
+        return Response(
+            {"errors": formatted_errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )

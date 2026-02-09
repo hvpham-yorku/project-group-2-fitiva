@@ -43,7 +43,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-container">
-      {/* Left Side - Gym Image with Diagonal Overlay */}
+      {/* Left Side - Gym Image */}
       <div className="login-left">
         <div className="gym-image"></div>
         <div className="diagonal-overlay"></div>
