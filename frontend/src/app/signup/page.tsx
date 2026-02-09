@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/ui/Logo';
-import ThemeToggle from '@/components/ui/ThemeToggle';
-import './signup.css';
 import PasswordRequirements from './PasswordRequirements';
+import './signup.css';
 
 interface SignupData {
   username: string;
@@ -124,21 +123,48 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
+  
+  const certDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const target = e.target as HTMLInputElement;
-    const { name, value, type } = target;
-    const checked = type === 'checkbox' ? target.checked : undefined;
-    
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-    
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+  // Close certifications dropdown when clicking outside
+  useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      certDropdownRef.current &&
+      !certDropdownRef.current.contains(event.target as Node)
+    ) {
+      setShowCertDropdown(false);
     }
   };
+
+  if (showCertDropdown) {
+    document.addEventListener('mousedown', handleClickOutside);
+  }
+
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+  };
+}, [showCertDropdown]);
+
+
+const handleChange = (
+  e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+) => {
+  const target = e.target as HTMLInputElement;
+  const { name, value, type } = target;
+  const checked = type === 'checkbox' ? target.checked : undefined;
+
+  setFormData(prev => ({
+    ...prev,
+    [name]: type === 'checkbox' ? checked : value
+  }));
+
+  if (errors[name]) {
+    setErrors(prev => ({ ...prev, [name]: '' }));
+  }
+};
+
+
 
   // Handle certification selection
   const handleCertificationToggle = (cert: string) => {
@@ -252,7 +278,6 @@ export default function SignupPage() {
 
       {/* Right Side - Sign Up Form */}
       <div className="signup-right">
-        <ThemeToggle />
         <div className="signup-box">
           {/* Logo */}
           <div className="logo-container">
@@ -585,7 +610,7 @@ export default function SignupPage() {
                   )}
 
                   {/* Dropdown Button */}
-                  <div className="cert-dropdown-wrapper">
+                  <div className="cert-dropdown-wrapper" ref={certDropdownRef} style={{ position: 'relative' }}>
                     <button
                       type="button"
                       className="cert-dropdown-button"
@@ -599,7 +624,21 @@ export default function SignupPage() {
 
                     {/* Dropdown List */}
                     {showCertDropdown && (
-                      <div className="cert-dropdown-menu">
+                      <div className="cert-dropdown-menu"
+                      style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          maxHeight: '200px',
+                          overflowY: 'auto',
+                          backgroundColor: 'white',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          marginTop: '0.25rem',
+                          zIndex: 50,
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                        }}>
                         {CERTIFICATIONS.map((cert) => (
                           <label key={cert} className="cert-dropdown-item">
                             <input
