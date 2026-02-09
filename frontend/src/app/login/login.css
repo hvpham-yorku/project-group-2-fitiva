@@ -1,3 +1,5 @@
+/* ALL CSS CODE IS GEN AI FROM CLAUDE SONNET 4.5 AFTER GIVING IT A FIGMA/HAND-DRAWN DESIGN SKETCH */
+
 /* Split-screen container */
 .login-container {
   display: flex;
@@ -6,7 +8,7 @@
   overflow: hidden;
 }
 
-/* Left Side - Gym Image (50% width) */
+/* Left Side - Gym Image */
 .login-left {
   position: relative;
   flex: 1;
@@ -40,7 +42,7 @@
   z-index: 2;
 }
 
-/* Right Side - Form (50% width) */
+/* Right Side - Form */
 .login-right {
   flex: 1;
   position: relative;

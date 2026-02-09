@@ -3,15 +3,49 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { profileAPI, ApiError } from '@/library/api';
+import { profileAPI, publicProfileAPI, ApiError } from '@/library/api';
 import EditProfileModal from '@/components/ui/EditProfileModal';
+import EditTrainerProfileModal from '@/components/ui/EditTrainerProfileModal';
 import './profile.css';
 
-type ProfileData = {
-  age?: number | null;
-  experience_level?: string;
-  training_location?: string;
-  fitness_focus?: string;
+type PublicProfile = {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  is_trainer: boolean;
+  is_owner: boolean;
+  user_profile: {
+    age?: number | null;
+    experience_level: string;
+    training_location: string;
+    fitness_focus: string;
+  } | null;
+  trainer_profile: {
+    id: number;
+    bio: string;
+    years_of_experience: number;
+    specialty_strength: boolean;
+    specialty_cardio: boolean;
+    specialty_flexibility: boolean;
+    specialty_sports: boolean;
+    specialty_rehabilitation: boolean;
+    certifications: string;
+    created_at: string;
+    updated_at: string;
+  } | null;
+};
+
+type WorkoutProgram = {
+  id: number;
+  name: string;
+  description: string;
+  focus: string;
+  difficulty: string;
+  weekly_frequency: number;
+  session_length: number;
+  created_at: string;
 };
 
 type ProfileForm = {
@@ -27,9 +61,11 @@ export default function ProfileViewPage() {
   const { user, isLoading: authLoading } = useAuth();
   const profileId = params.id as string;
 
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [programs, setPrograms] = useState<WorkoutProgram[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditTrainerModal, setShowEditTrainerModal] = useState(false);
   const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
   const [setupForm, setSetupForm] = useState<ProfileForm>({
     age: '',
@@ -40,44 +76,44 @@ export default function ProfileViewPage() {
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
   const [setupSaving, setSetupSaving] = useState(false);
 
-  // Check if viewing own profile
   const isOwnProfile = user && String(user.id) === profileId;
 
   useEffect(() => {
-  const loadProfile = async () => {
-    if (!user) return;
+    const loadProfile = async () => {
+      if (!user) return;
 
-    try {
-      const profileData = await profileAPI.getProfile();
-      
-      // Check if profile is incomplete (age not set)
-      if (!profileData.age && isOwnProfile) {
-        setIsFirstTimeSetup(true);
-      } else {
+      try {
+        setPageLoading(true);
+
+        // Load public profile
+        const profileData = await publicProfileAPI.getPublicProfile(Number(profileId));
         setProfile(profileData);
-        setIsFirstTimeSetup(false);
-      }
-    } catch {
-      // Profile doesn't exist - first time setup
-      if (isOwnProfile) {
-        setIsFirstTimeSetup(true);
-      }
-    } finally {
-      setPageLoading(false);
-    }
-  };
 
-  if (!authLoading) {
-    loadProfile();
-  }
-}, [user, authLoading, isOwnProfile]);
+        // Check if this is first-time setup (own profile with no age)
+        if (isOwnProfile && profileData.user_profile && !profileData.user_profile.age) {
+          setIsFirstTimeSetup(true);
+        }
 
-  // Redirect if user tries to access someone else's profile (for now)
-  useEffect(() => {
-    if (!authLoading && user && !isOwnProfile) {
-      router.push(`/profile/${user.id}`);
+        // Load programs if trainer
+        if (profileData.is_trainer) {
+          try {
+            const programsData = await publicProfileAPI.getTrainerPrograms(Number(profileId));
+            setPrograms(programsData.programs);
+          } catch {
+            setPrograms([]);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+      } finally {
+        setPageLoading(false);
+      }
+    };
+
+    if (!authLoading) {
+      loadProfile();
     }
-  }, [user, authLoading, isOwnProfile, router]);
+  }, [user, authLoading, profileId, isOwnProfile]);
 
   if (authLoading || pageLoading) {
     return (
@@ -87,14 +123,29 @@ export default function ProfileViewPage() {
     );
   }
 
-  if (!user) {
-    return null;
+  if (!user || !profile) {
+    return (
+      <div className="profile-page-container">
+        <div className="profile-view-card">
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+            Profile not found
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const handleProfileUpdate = (updatedProfile: ProfileData) => {
-    setProfile(updatedProfile);
+  const handleProfileUpdate = (updatedProfile: unknown) => {
     setShowEditModal(false);
     setIsFirstTimeSetup(false);
+    // Reload profile
+    window.location.reload();
+  };
+
+  const handleTrainerProfileUpdate = () => {
+    setShowEditTrainerModal(false);
+    // Reload profile
+    window.location.reload();
   };
 
   // Setup form handlers
@@ -107,10 +158,6 @@ export default function ProfileViewPage() {
     const newErrors: Record<string, string> = {};
 
     if (!setupForm.age) newErrors.age = 'Age is required';
-    if (!setupForm.experience_level) newErrors.experience_level = 'Experience level is required';
-    if (!setupForm.training_location) newErrors.training_location = 'Training location is required';
-    if (!setupForm.fitness_focus) newErrors.fitness_focus = 'Fitness focus is required';
-
     const ageNum = Number(setupForm.age);
     if (setupForm.age && (Number.isNaN(ageNum) || !Number.isFinite(ageNum))) {
       newErrors.age = 'Age must be a number';
@@ -129,15 +176,15 @@ export default function ProfileViewPage() {
     setSetupErrors({});
 
     try {
-      const newProfile = await profileAPI.updateProfile({
+      await profileAPI.updateProfile({
         age: Number(setupForm.age),
         experience_level: setupForm.experience_level,
         training_location: setupForm.training_location,
         fitness_focus: setupForm.fitness_focus,
       });
 
-      setProfile(newProfile);
       setIsFirstTimeSetup(false);
+      window.location.reload();
     } catch (e) {
       if (e instanceof ApiError && e.errors) {
         setSetupErrors(e.errors);
@@ -151,7 +198,7 @@ export default function ProfileViewPage() {
     }
   };
 
-  // Show first-time setup page
+  // First-time setup view
   if (isFirstTimeSetup && isOwnProfile) {
     return (
       <div className="profile-setup-container">
@@ -198,9 +245,6 @@ export default function ProfileViewPage() {
                 <option value="intermediate">Intermediate</option>
                 <option value="advanced">Advanced</option>
               </select>
-              {setupErrors.experience_level && (
-                <div className="setup-error">{setupErrors.experience_level}</div>
-              )}
             </div>
 
             <div className="setup-field">
@@ -216,9 +260,6 @@ export default function ProfileViewPage() {
                 <option value="home">Home</option>
                 <option value="gym">Gym</option>
               </select>
-              {setupErrors.training_location && (
-                <div className="setup-error">{setupErrors.training_location}</div>
-              )}
             </div>
 
             <div className="setup-field">
@@ -236,9 +277,6 @@ export default function ProfileViewPage() {
                 <option value="flexibility">Flexibility</option>
                 <option value="mixed">Mixed</option>
               </select>
-              {setupErrors.fitness_focus && (
-                <div className="setup-error">{setupErrors.fitness_focus}</div>
-              )}
             </div>
 
             <button className="setup-button" type="submit" disabled={setupSaving}>
@@ -250,75 +288,220 @@ export default function ProfileViewPage() {
     );
   }
 
-  // Show normal profile view
+  // Normal profile view
+  const fullName = `${profile.first_name} ${profile.last_name}`.trim() || profile.username;
+  const specialties = profile.trainer_profile ? [
+    profile.trainer_profile.specialty_strength && 'Strength Training',
+    profile.trainer_profile.specialty_cardio && 'Cardio',
+    profile.trainer_profile.specialty_flexibility && 'Flexibility',
+    profile.trainer_profile.specialty_sports && 'Sports',
+    profile.trainer_profile.specialty_rehabilitation && 'Rehabilitation',
+  ].filter(Boolean) : [];
+
   return (
     <div className="profile-page-container">
+      {/* Header Section */}
       <div className="profile-view-card">
-        {/* Header */}
         <div className="profile-view-header">
-          <div>
-            <h1 className="profile-view-title">{user.username}&apos;s Profile</h1>
-            <p className="profile-view-subtitle">{user.email}</p>
+          <div className="profile-header-info">
+            <div className="profile-avatar">
+              {fullName.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h1 className="profile-view-title">{fullName}</h1>
+              <p className="profile-view-subtitle">@{profile.username}</p>
+              {profile.is_trainer && (
+                <span className="trainer-badge">Certified Trainer</span>
+              )}
+            </div>
           </div>
-          {isOwnProfile && profile && (
+          {isOwnProfile && (
             <button
               className="edit-profile-button"
-              onClick={() => setShowEditModal(true)}
+              onClick={() => router.push('/dashboard')}
             >
-              Edit Profile
+              Back to Dashboard
             </button>
           )}
         </div>
 
-        {/* Profile Info Display */}
-        {profile ? (
-          <div className="profile-info-grid">
-            <div className="profile-info-item">
-              <span className="profile-info-label">Age</span>
-              <span className="profile-info-value">{profile.age || 'Not set'}</span>
+        {/* Trainer Profile Section */}
+        {profile.is_trainer && profile.trainer_profile && (
+          <div className="profile-section">
+            <div className="section-header">
+              <h2 className="section-title">About {isOwnProfile ? 'You' : fullName}</h2>
+              {isOwnProfile && (
+                <button
+                  className="edit-section-button"
+                  onClick={() => setShowEditTrainerModal(true)}
+                >
+                  Edit Trainer Info
+                </button>
+              )}
             </div>
 
-            <div className="profile-info-item">
-              <span className="profile-info-label">Experience Level</span>
-              <span className="profile-info-value">
-                {profile.experience_level ? 
-                  profile.experience_level.charAt(0).toUpperCase() + profile.experience_level.slice(1) 
-                  : 'Not set'}
-              </span>
-            </div>
+            <div className="trainer-info-grid">
 
-            <div className="profile-info-item">
-              <span className="profile-info-label">Training Location</span>
-              <span className="profile-info-value">
-                {profile.training_location ? 
-                  profile.training_location.charAt(0).toUpperCase() + profile.training_location.slice(1)
-                  : 'Not set'}
-              </span>
-            </div>
+              {profile.trainer_profile.bio && (
+                <div className="info-card full-width">
+                  <span className="info-label">Bio</span>
+                  <p className="info-text">{profile.trainer_profile.bio}</p>
+                </div>
+              )}
 
-            <div className="profile-info-item">
-              <span className="profile-info-label">Fitness Focus</span>
-              <span className="profile-info-value">
-                {profile.fitness_focus ? 
-                  profile.fitness_focus.charAt(0).toUpperCase() + profile.fitness_focus.slice(1)
-                  : 'Not set'}
-              </span>
+              <div className="info-card">
+                <span className="info-label">Experience</span>
+                <span className="info-value">
+                  {profile.trainer_profile.years_of_experience} years
+                </span>
+              </div>
+
+              {specialties.length > 0 && (
+                <div className="info-card full-width">
+                  <span className="info-label">Specialties</span>
+                  <div className="specialty-tags">
+                    {specialties.map((specialty) => (
+                      <span key={specialty as string} className="specialty-tag">
+                        {specialty as string}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {profile.trainer_profile.certifications && (
+                <div className="info-card full-width">
+                  <span className="info-label">Certifications</span>
+                  <div className="cert-display-chips">
+                    {profile.trainer_profile.certifications
+                      .split(',')
+                      .map(cert => cert.trim())
+                      .filter(cert => cert.length > 0)
+                      .map((cert) => (
+                        <span key={cert} className="cert-display-chip">
+                          {cert}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        ) : (
-          <div className="profile-empty-state">
-            <p>No profile information available.</p>
+        )}
+
+        {/* Fitness Profile Section (for regular users or trainers viewing own) */}
+        {profile.user_profile && (!profile.is_trainer || isOwnProfile) && (
+          <div className="profile-section">
+            <div className="section-header">
+              <h2 className="section-title">Fitness Profile</h2>
+              {isOwnProfile && (
+                <button
+                  className="edit-section-button"
+                  onClick={() => setShowEditModal(true)}
+                >
+                  Edit Profile
+                </button>
+              )}
+            </div>
+
+            <div className="profile-info-grid">
+              <div className="profile-info-item">
+                <span className="profile-info-label">Age</span>
+                <span className="profile-info-value">
+                  {profile.user_profile.age || 'Not set'}
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Experience Level</span>
+                <span className="profile-info-value">
+                  {profile.user_profile.experience_level
+                    ? profile.user_profile.experience_level.charAt(0).toUpperCase() +
+                      profile.user_profile.experience_level.slice(1)
+                    : 'Not set'}
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Training Location</span>
+                <span className="profile-info-value">
+                  {profile.user_profile.training_location === 'home' ? 'Home' : 'Gym'}
+                </span>
+              </div>
+
+              <div className="profile-info-item">
+                <span className="profile-info-label">Fitness Focus</span>
+                <span className="profile-info-value">
+                  {profile.user_profile.fitness_focus
+                    ? profile.user_profile.fitness_focus.charAt(0).toUpperCase() +
+                      profile.user_profile.fitness_focus.slice(1)
+                    : 'Not set'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* My Programs Section (for trainers only) */}
+        {profile.is_trainer && (
+          <div className="profile-section">
+            <div className="section-header">
+              <h2 className="section-title">My Programs</h2>
+              {isOwnProfile && (
+                <button
+                  className="create-program-button"
+                  onClick={() => alert('Create program functionality coming soon!')}
+                >
+                  + Create Program
+                </button>
+              )}
+            </div>
+
+            {programs.length === 0 ? (
+              <div className="empty-state">
+                <p className="empty-state-text">
+                  {isOwnProfile
+                    ? "You haven't created any workout programs yet."
+                    : "This trainer hasn't created any programs yet."}
+                </p>
+              </div>
+            ) : (
+              <div className="programs-grid">
+                {programs.map((program) => (
+                  <div key={program.id} className="program-card">
+                    <h3 className="program-name">{program.name}</h3>
+                    <p className="program-description">{program.description}</p>
+                    <div className="program-meta">
+                      <span className="program-badge">{program.difficulty}</span>
+                      <span className="program-badge">{program.focus}</span>
+                    </div>
+                    <div className="program-details">
+                      <span>{program.weekly_frequency}x per week</span>
+                      <span>{program.session_length} min</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Edit Modal */}
-      {showEditModal && (
+      {/* Modals */}
+      {showEditModal && profile.user_profile && (
         <EditProfileModal
-          currentProfile={profile}
+          currentProfile={profile.user_profile}
           isFirstTime={false}
           onClose={() => setShowEditModal(false)}
           onSave={handleProfileUpdate}
+        />
+      )}
+
+      {showEditTrainerModal && profile.trainer_profile && (
+        <EditTrainerProfileModal
+          currentData={profile.trainer_profile}
+          onClose={() => setShowEditTrainerModal(false)}
+          onSave={handleTrainerProfileUpdate}
         />
       )}
     </div>
