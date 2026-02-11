@@ -25,7 +25,7 @@ type PublicProfile = {
     age?: number | null;
     experience_level: string;
     training_location: string;
-    fitness_focus: string;
+    fitness_focus: string[];
   } | null;
   trainer_profile: {
     id: number;
@@ -46,7 +46,7 @@ type WorkoutProgram = {
   id: number;
   name: string;
   description: string;
-  focus: string;
+  focus: string[];
   difficulty: string;
   weekly_frequency: number;
   session_length: number;
@@ -57,7 +57,7 @@ type ProfileForm = {
   age: string;
   experience_level: string;
   training_location: string;
-  fitness_focus: string;
+  fitness_focus: string[];
 };
 
 // ============================================================================
@@ -79,7 +79,7 @@ const FOCUS_OPTIONS = [
   { value: 'strength', label: 'Strength' },
   { value: 'cardio', label: 'Cardio' },
   { value: 'flexibility', label: 'Flexibility' },
-  { value: 'mixed', label: 'Mixed' },
+  { value: 'balance', label: 'Balance' },
 ];
 
 const SPECIALTY_LABELS = {
@@ -139,7 +139,7 @@ export default function ProfileViewPage() {
     age: '',
     experience_level: 'beginner',
     training_location: 'home',
-    fitness_focus: 'mixed',
+    fitness_focus: [],
   });
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
   const [setupSaving, setSetupSaving] = useState(false);
@@ -201,6 +201,26 @@ export default function ProfileViewPage() {
     setShowEditTrainerModal(false);
     window.location.reload();
   };
+
+  const handleFocusChange = (focusValue: string) => {
+  setSetupForm(prev => {
+    const currentFocuses = prev.fitness_focus;
+    if (currentFocuses.includes(focusValue)) {
+      // Remove if already selected
+      return {
+        ...prev,
+        fitness_focus: currentFocuses.filter(f => f !== focusValue)
+      };
+    } else {
+      // Add if not selected
+      return {
+        ...prev,
+        fitness_focus: [...currentFocuses, focusValue]
+      };
+    }
+  });
+  setSetupErrors(prev => ({ ...prev, fitness_focus: '' }));
+};
 
   // ========================================
   // Event Handlers - First-Time Setup
@@ -357,21 +377,24 @@ export default function ProfileViewPage() {
 
             {/* Fitness Focus */}
             <div className="setup-field">
-              <label className="setup-label" htmlFor="fitness_focus">
-                Primary fitness focus
+              <label className="setup-label">
+                Fitness Focus<span className="required-asterisk">*</span>
               </label>
-              <select
-                id="fitness_focus"
-                className="setup-select"
-                value={setupForm.fitness_focus}
-                onChange={e => setSetupField('fitness_focus', e.target.value)}
-              >
+              <div className="checkbox-group">
                 {FOCUS_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+                  <label key={opt.value} className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={setupForm.fitness_focus.includes(opt.value)}
+                      onChange={() => handleFocusChange(opt.value)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
+              {setupErrors.fitness_focus && (
+                <div className="setup-error">{setupErrors.fitness_focus}</div>
+              )}
             </div>
 
             <button className="setup-button" type="submit" disabled={setupSaving}>
@@ -523,9 +546,17 @@ export default function ProfileViewPage() {
 
               <div className="profile-info-item">
                 <span className="profile-info-label">Fitness Focus</span>
-                <span className="profile-info-value">
-                  {capitalize(profile.user_profile.fitness_focus)}
-                </span>
+                <div className="focus-tags">
+                  {profile.user_profile.fitness_focus && Array.isArray(profile.user_profile.fitness_focus) ? (
+                    profile.user_profile.fitness_focus.map((focus: string) => (
+                      <span key={focus} className="focus-tag">
+                        {capitalize(focus)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="profile-info-value">Not set</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

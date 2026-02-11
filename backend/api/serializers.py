@@ -1,25 +1,30 @@
-import re
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
+import re
+
 from .models import (
     CustomUser,
     UserProfile,
-    TrainerProfile,
     WorkoutPlan,
-    WorkoutSession,
-    WorkoutFeedback,
     ProgramSection,
     Exercise,
     ExerciseSet,
+    TrainerProfile,
+    WorkoutSession,
+    WorkoutFeedback,
     EXPERIENCE_CHOICES,
     LOCATION_CHOICES,
-    FOCUS_CHOICES,
+    DIFFICULTY_RATING_CHOICES,
 )
 
+
+User = get_user_model()
 
 
 # ============================================================================
 # USER & PROFILE SERIALIZERS
 # ============================================================================
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serializer for user fitness profile."""
@@ -27,10 +32,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = [
-            "id", "age", "experience_level", "training_location", 
+            "id", "age", "experience_level", "training_location",
             "fitness_focus", "created_at", "updated_at"
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
 
     def validate_age(self, value):
         """Validate age is within reasonable bounds."""
@@ -39,7 +45,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if value > 120:
             raise serializers.ValidationError("Please enter a valid age")
         return value
-    
+
+
     def validate_experience_level(self, value):
         """Validate experience level against model choices."""
         valid_choices = [choice[0] for choice in EXPERIENCE_CHOICES]
@@ -48,7 +55,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 f"Invalid experience level. Choose from: {', '.join(valid_choices)}"
             )
         return value
-    
+
+
     def validate_training_location(self, value):
         """Validate training location against model choices."""
         valid_choices = [choice[0] for choice in LOCATION_CHOICES]
@@ -57,27 +65,43 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 f"Invalid training location. Choose from: {', '.join(valid_choices)}"
             )
         return value
-    
+
+
     def validate_fitness_focus(self, value):
-        """Validate fitness focus against model choices."""
-        valid_choices = [choice[0] for choice in FOCUS_CHOICES]
-        if value not in valid_choices:
-            raise serializers.ValidationError(
-                f"Invalid fitness focus. Choose from: {', '.join(valid_choices)}"
-            )
+        """Validate fitness_focus is a non-empty list with valid options."""
+        valid_focuses = ['strength', 'cardio', 'flexibility', 'balance']
+        
+        if not isinstance(value, list):
+            raise serializers.ValidationError("fitness_focus must be a list")
+        
+        if len(value) == 0:
+            raise serializers.ValidationError("Please select at least one fitness focus")
+        
+        for focus in value:
+            if focus not in valid_focuses:
+                raise serializers.ValidationError(
+                    f"Invalid focus '{focus}'. Choose from: {', '.join(valid_focuses)}"
+                )
+        
         return value
-    
+
+
     def validate(self, data):
         """Validate all required fields are present."""
         if data.get('age') is not None and data.get('age') < 0:
             raise serializers.ValidationError({'age': 'Age cannot be negative'})
+        
         if not data.get('experience_level'):
             raise serializers.ValidationError({'experience_level': 'Experience level is required'})
+        
         if not data.get('training_location'):
             raise serializers.ValidationError({'training_location': 'Training location is required'})
+        
         if not data.get('fitness_focus'):
             raise serializers.ValidationError({'fitness_focus': 'Fitness focus is required'})
+        
         return data
+
 
 
 class TrainerProfileSerializer(serializers.ModelSerializer):
@@ -102,6 +126,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
         return value
 
 
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user data with nested profiles."""
     profile = UserProfileSerializer(read_only=True)
@@ -116,9 +141,11 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+
 # ============================================================================
 # AUTHENTICATION SERIALIZERS
 # ============================================================================
+
 
 class UserSignupSerializer(serializers.Serializer):
     """Serializer for user registration with optional trainer data."""
@@ -131,6 +158,7 @@ class UserSignupSerializer(serializers.Serializer):
     is_trainer = serializers.BooleanField(default=False)
     trainer_data = serializers.JSONField(required=False, allow_null=True)
 
+
     def validate_username(self, value):
         """Validate username is unique and within length limits."""
         if len(value) > 16:
@@ -139,12 +167,14 @@ class UserSignupSerializer(serializers.Serializer):
             raise serializers.ValidationError("Username already taken")
         return value
 
+
     def validate_email(self, value):
         """Validate email is unique (case-insensitive)."""
         normalized_email = value.strip().lower()
         if CustomUser.objects.filter(email__iexact=normalized_email).exists():
             raise serializers.ValidationError("Email already in use")
         return normalized_email
+
 
     def validate_password(self, value):
         """Validate password meets security requirements."""
@@ -186,6 +216,7 @@ class UserSignupSerializer(serializers.Serializer):
         
         return data
 
+
     def create(self, validated_data):
         """Create user with profile and optional trainer profile."""
         # Remove password confirmation
@@ -207,6 +238,7 @@ class UserSignupSerializer(serializers.Serializer):
         # Create UserProfile
         UserProfile.objects.create(user=user)
 
+
         # Create TrainerProfile if user is a trainer
         if user.is_trainer:
             if trainer_data:
@@ -225,7 +257,9 @@ class UserSignupSerializer(serializers.Serializer):
                 # Create empty trainer profile
                 TrainerProfile.objects.create(user=user)
 
+
         return user
+
 
 
 class UserLoginSerializer(serializers.Serializer):
@@ -260,9 +294,11 @@ class UserLoginSerializer(serializers.Serializer):
         data['user'] = user
         return data
 
+
 # ============================================================================
 # WORKOUT SERIALIZERS
 # ============================================================================
+
 
 class ExerciseSetSerializer(serializers.ModelSerializer):
     """Serializer for exercise sets."""
@@ -271,6 +307,7 @@ class ExerciseSetSerializer(serializers.ModelSerializer):
         model = ExerciseSet
         fields = ['id', 'set_number', 'reps', 'time', 'rest']
         read_only_fields = ['id']
+
 
 
 class ExerciseSerializer(serializers.ModelSerializer):
@@ -283,6 +320,7 @@ class ExerciseSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+
 class ProgramSectionSerializer(serializers.ModelSerializer):
     """Serializer for program sections with nested exercises."""
     exercises = ExerciseSerializer(many=True)
@@ -293,11 +331,13 @@ class ProgramSectionSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+
 class WorkoutPlanSerializer(serializers.ModelSerializer):
     """Serializer for workout plans with trainer information and nested sections."""
     trainer_name = serializers.SerializerMethodField()
     sections = ProgramSectionSerializer(many=True, read_only=False, required=False)
-    
+
+
     class Meta:
         model = WorkoutPlan
         fields = [
@@ -307,41 +347,64 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
             'sections'
         ]
         read_only_fields = ['created_at', 'updated_at', 'trainer']
-    
+
+
     def get_trainer_name(self, obj):
         """Return trainer's full name or default."""
         if obj.trainer:
             return f"{obj.trainer.first_name} {obj.trainer.last_name}"
         return "System Default"
-    
+
+
+    def validate_focus(self, value):
+        """Validate focus is a non-empty list with valid options."""
+        valid_focuses = ['strength', 'cardio', 'flexibility', 'balance']
+        
+        if not isinstance(value, list):
+            raise serializers.ValidationError("focus must be a list")
+        
+        if len(value) == 0:
+            raise serializers.ValidationError("Please select at least one focus")
+        
+        for focus in value:
+            if focus not in valid_focuses:
+                raise serializers.ValidationError(
+                    f"Invalid focus '{focus}'. Choose from: {', '.join(valid_focuses)}"
+                )
+        
+        return value
+
+
     def create(self, validated_data):
         """Create workout plan with nested sections, exercises, and sets."""
         sections_data = validated_data.pop('sections', [])
-        
+
+
         # Create the workout plan
         plan = WorkoutPlan.objects.create(**validated_data)
-        
+
+
         # Create sections with exercises and sets
         for section_order, section_data in enumerate(sections_data):
             exercises_data = section_data.pop('exercises', [])
-            
             section = ProgramSection.objects.create(
                 program=plan,
                 format=section_data.get('format', ''),
                 type=section_data.get('type', ''),
                 order=section_order
             )
-            
+
+
             # Create exercises for this section
             for exercise_order, exercise_data in enumerate(exercises_data):
                 sets_data = exercise_data.pop('sets', [])
-                
                 exercise = Exercise.objects.create(
                     section=section,
                     name=exercise_data.get('name', ''),
                     order=exercise_order
                 )
-                
+
+
                 # Create sets for this exercise
                 for set_data in sets_data:
                     ExerciseSet.objects.create(
@@ -351,8 +414,10 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
                         time=set_data.get('time'),
                         rest=set_data.get('rest', 0)
                     )
-        
+
+
         return plan
+
 
 
 
@@ -372,6 +437,7 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
         """Create workout session for authenticated user."""
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
 
 
 class WorkoutFeedbackSerializer(serializers.ModelSerializer):

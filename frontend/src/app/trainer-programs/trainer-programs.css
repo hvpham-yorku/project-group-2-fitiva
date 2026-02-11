@@ -251,34 +251,30 @@
 .btn-edit {
   flex: 1;
   padding: 0.75rem;
+  color: white;
   border: 2px solid var(--border-medium);
-  background: var(--bg-secondary);
+  background: linear-gradient(135deg, #EF3E36 0%, #FF9234 100%);
   border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(239, 62, 54, 0.3);
   cursor: pointer;
   font-size: 0.95rem;
   font-weight: 600;
   transition: all 0.2s;
 }
 
-.btn-view {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-}
-
 .btn-view:hover {
-  background: var(--primary-dark);
-  border-color: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 62, 54, 0.4);
 }
 
-.btn-edit {
-  border-color: var(--primary);
-  color: var(--primary);
+.btn-view:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .btn-edit:hover {
-  background-color: var(--primary);
-  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 62, 54, 0.4);
 }
 
 .program-date {
@@ -555,4 +551,26 @@
   .btn-create {
     width: 100%;
   }
+}
+
+/* Author section styling */
+.program-author {
+  margin: 12px 0;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.program-author strong {
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+/* Section subtitle for non-trainer view */
+.section-subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 20px;
 }

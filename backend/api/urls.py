@@ -33,6 +33,12 @@ urlpatterns = [
     path("trainer/profile/", views.update_trainer_profile, name="update_trainer_profile"),
     
     # ========================================
+    # Other Endpoints
+    # ========================================
+    path('recommendations/', views.get_recommendations, name='recommendations'),
+    path('programs/<int:program_id>/', views.get_program_detail, name='program-detail'),
+    
+    # ========================================
     # Router URLs (WorkoutProgramViewSet)
     # Generates: /programs/, /programs/{id}/
     # ========================================
