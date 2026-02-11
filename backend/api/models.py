@@ -121,6 +121,62 @@ class WorkoutPlan(models.Model):
         return self.name
 
 
+class ExerciseTemplate(models.Model):
+    """
+    Exercise library/template that trainers can create and reuse.
+    Separate from the actual exercises in workout programs.
+    """
+    EXERCISE_TYPE_CHOICES = [
+        ('reps', 'Rep-based'),
+        ('time', 'Time-based'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, help_text="Exercise instructions/description")
+    muscle_groups = models.JSONField(
+        default=list,
+        help_text="List of muscle groups (e.g., ['chest', 'triceps'])"
+    )
+    exercise_type = models.CharField(
+        max_length=10,
+        choices=EXERCISE_TYPE_CHOICES,
+        default='reps',
+        help_text="Whether this exercise is rep-based or time-based"
+    )
+    default_recommendations = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="e.g., '3-4 sets of 8-12 reps'"
+    )
+    image_url = models.URLField(blank=True, null=True, help_text="Future: exercise demonstration image")
+    
+    trainer = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='exercise_templates',
+        null=True,
+        blank=True,
+        help_text="If null, this is a default exercise available to all"
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Default exercises are available to all trainers"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'exercise_templates'
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['trainer', 'is_default']),
+            models.Index(fields=['name']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({'Default' if self.is_default else self.trainer.username if self.trainer else 'Unknown'})"
+
 class ProgramSection(models.Model):
     """Section within a workout program (e.g., Day 1, Day 2)."""
     program = models.ForeignKey(
