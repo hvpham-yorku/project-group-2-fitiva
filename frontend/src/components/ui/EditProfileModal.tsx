@@ -8,14 +8,14 @@ type ProfileForm = {
   age: string;
   experience_level: string;
   training_location: string;
-  fitness_focus: string;
+  fitness_focus: string[];
 };
 
 type ProfileData = {
   age?: number | null;
   experience_level?: string;
   training_location?: string;
-  fitness_focus?: string;
+  fitness_focus?: string[];
 };
 
 type EditProfileModalProps = {
@@ -24,6 +24,13 @@ type EditProfileModalProps = {
   onClose: () => void;
   onSave: (profile: ProfileData) => void;
 };
+
+const FOCUS_OPTIONS = [
+  { value: 'strength', label: 'Strength' },
+  { value: 'cardio', label: 'Cardio' },
+  { value: 'flexibility', label: 'Flexibility' },
+  { value: 'balance', label: 'Balance' },
+];
 
 export default function EditProfileModal({ 
   currentProfile, 
@@ -35,7 +42,7 @@ export default function EditProfileModal({
     age: '',
     experience_level: 'beginner',
     training_location: 'home',
-    fitness_focus: 'mixed',
+    fitness_focus: [],
   });
 
   const [saving, setSaving] = useState(false);
@@ -47,7 +54,7 @@ export default function EditProfileModal({
         age: currentProfile.age !== undefined && currentProfile.age !== null ? String(currentProfile.age) : '',
         experience_level: currentProfile.experience_level || 'beginner',
         training_location: currentProfile.training_location || 'home',
-        fitness_focus: currentProfile.fitness_focus || 'mixed',
+        fitness_focus: currentProfile.fitness_focus || [],
       });
     }
   }, [currentProfile]);
@@ -57,13 +64,36 @@ export default function EditProfileModal({
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
+  // ✅ NEW: Handler for checkbox changes
+  const handleFocusChange = (focusValue: string) => {
+    setForm(prev => {
+      const currentFocuses = prev.fitness_focus;
+      if (currentFocuses.includes(focusValue)) {
+        // Remove if already selected
+        return {
+          ...prev,
+          fitness_focus: currentFocuses.filter(f => f !== focusValue)
+        };
+      } else {
+        // Add if not selected
+        return {
+          ...prev,
+          fitness_focus: [...currentFocuses, focusValue]
+        };
+      }
+    });
+    setErrors(prev => ({ ...prev, fitness_focus: '' }));
+  };
+
   const validateClientSide = () => {
     const newErrors: Record<string, string> = {};
 
     if (!form.age) newErrors.age = 'Age is required';
     if (!form.experience_level) newErrors.experience_level = 'Experience level is required';
     if (!form.training_location) newErrors.training_location = 'Training location is required';
-    if (!form.fitness_focus) newErrors.fitness_focus = 'Fitness focus is required';
+    if (!form.fitness_focus || form.fitness_focus.length === 0) {
+      newErrors.fitness_focus = 'Please select at least one fitness focus';
+    }
 
     const ageNum = Number(form.age);
     if (form.age && (Number.isNaN(ageNum) || !Number.isFinite(ageNum))) {
@@ -120,7 +150,9 @@ export default function EditProfileModal({
           {errors.detail && <div className="modal-alert error">{errors.detail}</div>}
 
           <div className="modal-field">
-            <label className="modal-label" htmlFor="age">Age<span style={{ color: '#dc2626' }}>*</span></label>
+            <label className="modal-label" htmlFor="age">
+              Age<span style={{ color: '#dc2626' }}>*</span>
+            </label>
             <input
               id="age"
               className="modal-input"
@@ -162,19 +194,23 @@ export default function EditProfileModal({
             {errors.training_location && <div className="modal-error">{errors.training_location}</div>}
           </div>
 
+          {/* ✅ CHANGED: Dropdown replaced with checkboxes */}
           <div className="modal-field">
-            <label className="modal-label" htmlFor="fitness_focus">Primary fitness focus</label>
-            <select
-              id="fitness_focus"
-              className="modal-select"
-              value={form.fitness_focus}
-              onChange={e => setField('fitness_focus', e.target.value)}
-            >
-              <option value="strength">Strength</option>
-              <option value="cardio">Cardio</option>
-              <option value="flexibility">Flexibility</option>
-              <option value="mixed">Mixed</option>
-            </select>
+            <label className="modal-label">
+              Fitness Focus<span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <div className="checkbox-group">
+              {FOCUS_OPTIONS.map(opt => (
+                <label key={opt.value} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={form.fitness_focus.includes(opt.value)}
+                    onChange={() => handleFocusChange(opt.value)}
+                  />
+                  <span>{opt.label}</span>
+                </label>
+              ))}
+            </div>
             {errors.fitness_focus && <div className="modal-error">{errors.fitness_focus}</div>}
           </div>
 

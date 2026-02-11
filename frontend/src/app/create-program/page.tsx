@@ -39,7 +39,6 @@ type InvalidFieldKey =
 // ============================================================================
 
 const FOCUS_OPTIONS = [
-  { value: '', label: 'Select Focus' },
   { value: 'strength', label: 'Strength' },
   { value: 'cardio', label: 'Cardio' },
   { value: 'flexibility', label: 'Flexibility' },
@@ -100,7 +99,7 @@ function formatTime(seconds: number): string {
 
 function getInvalidFields(
   programName: string,
-  programFocus: string,
+  programFocus: string[],  // CHANGED: array
   programDifficulty: string,
   weeklyFrequency: number,
   sessionLength: number,
@@ -109,7 +108,7 @@ function getInvalidFields(
   const invalid: InvalidFieldKey[] = [];
 
   if (!programName.trim()) invalid.push('programName');
-  if (!programFocus) invalid.push('programFocus');
+  if (!programFocus || programFocus.length === 0) invalid.push('programFocus');  // CHANGED
   if (!programDifficulty) invalid.push('programDifficulty');
   if (!weeklyFrequency || weeklyFrequency < 1 || weeklyFrequency > 7) {
     invalid.push('weeklyFrequency');
@@ -138,7 +137,7 @@ export default function CreateProgramPage() {
   // Program details
   const [programName, setProgramName] = useState('');
   const [programDescription, setProgramDescription] = useState('');
-  const [programFocus, setProgramFocus] = useState('');
+  const [programFocus, setProgramFocus] = useState<string[]>([]);
   const [programDifficulty, setProgramDifficulty] = useState('');
   const [weeklyFrequency, setWeeklyFrequency] = useState<number>(0);
   const [sessionLength, setSessionLength] = useState<number>(60);
@@ -202,6 +201,17 @@ export default function CreateProgramPage() {
     setCurrentSectionId(sectionId);
     setCurrentView('add-exercise');
   };
+
+  const handleProgramFocusChange = (focusValue: string) => {
+  setProgramFocus(prev => {
+    if (prev.includes(focusValue)) {
+      return prev.filter(f => f !== focusValue);
+    } else {
+      return [...prev, focusValue];
+    }
+  });
+  setInvalidFields(prev => prev.filter(f => f !== 'programFocus'));
+};
 
   const handleExerciseSelect = () => {
     setCurrentView('exercise-details');
@@ -366,20 +376,20 @@ export default function CreateProgramPage() {
           {/* Focus */}
           <div className="form-group">
             <label>Focus *</label>
-            <select
-              value={programFocus}
-              onChange={e => setProgramFocus(e.target.value)}
-              className={`input-field ${invalidFields.includes('programFocus') ? 'field-invalid' : ''}`}
-              required
-            >
+            <div className="checkbox-group">
               {FOCUS_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+                <label key={opt.value} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={programFocus.includes(opt.value)}
+                    onChange={() => handleProgramFocusChange(opt.value)}
+                  />
+                  <span>{opt.label}</span>
+                </label>
               ))}
-            </select>
+            </div>
             {invalidFields.includes('programFocus') && (
-              <span className="field-error">Please select a focus</span>
+              <span className="field-error">Please select at least one focus</span>
             )}
           </div>
 

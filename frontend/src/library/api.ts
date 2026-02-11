@@ -69,7 +69,7 @@ interface ProfileData {
   age?: number;
   experience_level?: string;
   training_location?: string;
-  fitness_focus?: string;
+  fitness_focus?: string[];
 }
 
 export class ApiError extends Error {
@@ -223,7 +223,7 @@ export const publicProfileAPI = {
         age?: number | null;
         experience_level: string;
         training_location: string;
-        fitness_focus: string;
+        fitness_focus: string[];
         } | null;
     trainer_profile: {
         id: number;
@@ -250,7 +250,7 @@ export const publicProfileAPI = {
       id: number;
       name: string;
       description: string;
-      focus: string;
+      focus: string[];
       difficulty: string;
       weekly_frequency: number;
       session_length: number;

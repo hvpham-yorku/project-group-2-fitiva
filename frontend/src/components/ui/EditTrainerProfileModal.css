@@ -236,3 +236,41 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Checkbox Group Styling */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.75rem;
+  border: 2px solid var(--border-medium);
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  background-color: var(--bg-secondary);
+}
+
+.checkbox-label:hover {
+  border-color: var(--primary);
+  background-color: var(--bg-tertiary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checkbox-label span {
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}

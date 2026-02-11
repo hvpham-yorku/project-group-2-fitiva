@@ -336,14 +336,33 @@ class WorkoutProgramViewSet(viewsets.ModelViewSet):
     """ViewSet for managing workout plans/programs."""
     serializer_class = WorkoutPlanSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         """Return all workout programs ordered by creation date."""
         return WorkoutPlan.objects.all().select_related('trainer').order_by('-created_at')
-    
+
     def perform_create(self, serializer):
         """Set the trainer to the current user when creating a new plan."""
+        # Check if user is a trainer
+        if not self.request.user.is_trainer:
+            raise ValidationError({"detail": "Only trainers can create workout programs"})
         serializer.save(trainer=self.request.user)
+    
+    def perform_update(self, serializer):
+        """Ensure only the program owner can update it."""
+        if not self.request.user.is_trainer:
+            raise ValidationError({"detail": "Only trainers can update workout programs"})
+        if serializer.instance.trainer != self.request.user:
+            raise ValidationError({"detail": "You can only update your own programs"})
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        """Ensure only the program owner can delete it."""
+        if not self.request.user.is_trainer:
+            raise ValidationError({"detail": "Only trainers can delete workout programs"})
+        if instance.trainer != self.request.user:
+            raise ValidationError({"detail": "You can only delete your own programs"})
+        instance.delete()
 
 
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
@@ -371,6 +390,80 @@ class WorkoutFeedbackViewSet(viewsets.ModelViewSet):
             session__user=self.request.user
         ).order_by('-created_at')
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recommendations(request):
+    """
+    Get workout program recommendations based on user's fitness focuses.
+    Returns programs that share at least one focus with the user's profile.
+    """
+    try:
+        # Get user's profile
+        user_profile = UserProfile.objects.get(user=request.user)
+        user_focuses = user_profile.fitness_focus
+        
+        # Validate user has focuses set
+        if not user_focuses or len(user_focuses) == 0:
+            return Response({
+                'message': 'Please set your fitness focuses in your profile to get recommendations',
+                'programs': []
+            }, status=status.HTTP_200_OK)
+        
+        # Get all non-deleted programs
+        all_programs = WorkoutPlan.objects.filter(is_deleted=False)
+        
+        # Filter programs that have at least one matching focus
+        recommended_programs = []
+        for program in all_programs:
+            program_focuses = program.focus
+            if program_focuses:
+                # Check if there's any overlap between user focuses and program focuses
+                matching_focuses = set(user_focuses) & set(program_focuses)
+                if matching_focuses:
+                    recommended_programs.append(program)
+        
+        # Serialize the programs
+        serializer = WorkoutPlanSerializer(recommended_programs, many=True)
+        
+        return Response({
+            'user_focuses': user_focuses,
+            'total_recommendations': len(recommended_programs),
+            'programs': serializer.data
+        }, status=status.HTTP_200_OK)
+        
+    except UserProfile.DoesNotExist:
+        return Response({
+            'error': 'User profile not found. Please complete your profile setup.'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_program_detail(request, program_id):
+    """
+    Get detailed information about a specific workout program.
+    Includes all sections, exercises, and sets.
+    """
+    try:
+        # Get the program
+        program = WorkoutPlan.objects.get(id=program_id, is_deleted=False)
+        
+        # Serialize with full nested data
+        serializer = WorkoutPlanSerializer(program)
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)
+        
+    except WorkoutPlan.DoesNotExist:
+        return Response({
+            'error': 'Program not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ============================================================================
 # PASSWORD RESET VIEWS (To be implemented)

@@ -17,12 +17,7 @@ LOCATION_CHOICES = [
     ('gym', 'Gym'),
 ]
 
-FOCUS_CHOICES = [
-    ('strength', 'Strength'),
-    ('cardio', 'Cardio'),
-    ('flexibility', 'Flexibility'),
-    ('mixed', 'Mixed'),
-]
+VALID_FOCUS_OPTIONS = ['strength', 'cardio', 'flexibility', 'balance']
 
 DIFFICULTY_RATING_CHOICES = [
     (1, 'Very Easy'),
@@ -55,7 +50,10 @@ class UserProfile(models.Model):
     age = models.IntegerField(null=True, blank=True)
     experience_level = models.CharField(max_length=20, choices=EXPERIENCE_CHOICES, default='beginner')
     training_location = models.CharField(max_length=20, choices=LOCATION_CHOICES, default='home')
-    fitness_focus = models.CharField(max_length=50, choices=FOCUS_CHOICES, default='mixed')
+    fitness_focus = models.JSONField(
+        default=list,
+        help_text="List of fitness focuses (e.g., ['strength', 'cardio'])"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -95,7 +93,10 @@ class WorkoutPlan(models.Model):
     """Workout plan created by trainers or system defaults."""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    focus = models.CharField(max_length=20, choices=FOCUS_CHOICES)
+    focus = models.JSONField(
+        default=list,
+        help_text="List of workout focuses (e.g., ['strength', 'cardio'])"
+    )
     difficulty = models.CharField(max_length=20, choices=EXPERIENCE_CHOICES)
     weekly_frequency = models.IntegerField(help_text="Number of workouts per week")
     session_length = models.IntegerField(help_text="Minutes per session")
