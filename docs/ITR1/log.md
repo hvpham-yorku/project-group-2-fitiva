@@ -229,18 +229,19 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 # 5. Task Assignments, Estimates, and Actuals (Per User Story)
 > **Rule:** Include all planned tasks for ITR1 (done or not), and record estimate vs actual time.
 
-## 5.1 Summary Table (fill in Jira IDs + times)
-| User Story | Owner | Est. Time | Status | Notes |
-|---|---|---:|---:|---:|---|---|
-| US 1.1 Register & Log In  | 4d | Ege & Weiqin | Done | Auth flow + validation + session |
-| US 1.2 Create Fitness Profile | 4d | Arshia & Raha | Done | User fields + trainer profile basics |
-| US 1.3 Create Programs from Workouts | (name) | Done | Sections + exercises + sets/reps/rest |
-| US 1.4 View List of Workouts  | (name) | 2d | Done | Catalog + filters + detail view |
-| US 1.5 Browse Trainer Programs | (name) | 2d | Done | Program list + labels + details |
-| US 1.6 Profile-Based Recommendations | (name) | 2d | Done | Derived list from profile |
-| US 1.7 Select Plan + Weekly Schedule | Shiah | 2d | In Progress/Planned | If not in ITR1, mark as planned |
-| US 3.1 Record Workout Completion | Raha | 3d | In Progress/Done | Completion + details saved |
-| US 3.6 Calendar Schedule View | Shiah | 3d | In Progress/Done | Calendar layout + click details |
+## 5.1 Summary Table
+
+| User Story | Owner(s) | Estimated Time | Status | Notes |
+|------------|----------|---------------|--------|-------|
+| US 1.1 – Register & Log In | Ege, Weiqin | 4 days | Completed | Full authentication system with password validation and session-based login |
+| US 1.2 – Create Fitness Profile | Arshia, Raha | 4 days | Completed | Profile auto-created on signup, editable via modal with validation |
+| US 1.3 – View Profile-Based Workout Recommendations | — | 2 days | Not Started | Recommendation algorithm and matching logic not yet implemented |
+| US 1.4 – Trainer Program Creation & Browsing | Ege | 3 days | Completed | Program creation (Mon–Sun structure), exercise library, sets config, drag-and-drop, program listing |
+| US 1.5 – Select Training Plan & Auto-Generate Weekly Schedule | Shiah | 2 days | Not Started | Plan selection and 7-day schedule generation pending |
+| US 1.6 Profile-Based Recommendations | Ege | 2d | Done | Derived list from profile |
+| US 3.1 – Record Workout Completion | Raha | 3 days | Partially Implemented | WorkoutSession model created; UI integration pending |
+| US 3.6 – Personalized Calendar Schedule View | Shiah | 3 days | Partially Implemented | Weekly calendar UI planned; dynamic schedule generation pending |
+
 
 ## 5.2 Development Tasks (Recommended Breakdown)
 For each story, list key dev tasks so the TA can see real engineering work.
