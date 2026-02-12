@@ -847,6 +847,7 @@ def get_active_schedule(request):
                     if not isinstance(section_ids, list):
                         section_ids = [section_ids] if section_ids != 'rest' else []
                     
+                    # FIXED: Proper indentation here
                     for section_id in section_ids:
                         try:
                             section = ProgramSection.objects.get(id=section_id)
@@ -857,11 +858,16 @@ def get_active_schedule(request):
                                 'id': section.id,
                                 'name': section.format,
                                 'type': section.type,
-                                'exercise_count': exercise_count
+                                'exercise_count': exercise_count,
+                                # NEW: Add program information
+                                'program_id': section.program.id,
+                                'program_name': section.program.name,
+                                'focus': section.program.focus,
                             })
                         except ProgramSection.DoesNotExist:
                             pass
                     
+                    # FIXED: This needs to be at the same level as the for loop above
                     calendar_events.append({
                         'date': event_date.isoformat(),
                         'day': day_name,
@@ -881,7 +887,6 @@ def get_active_schedule(request):
             'schedule': None,
             'calendar_events': []
         }, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])

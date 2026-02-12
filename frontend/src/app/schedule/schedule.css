@@ -298,10 +298,7 @@
 }
 
 .workout-name {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
+  display: none;;
 }
 
 .exercise-count {
@@ -598,7 +595,7 @@
   }
 
   .calendar-day {
-    min-height: 120px;
+    min-height: 180px;
   }
 
   .modal-content {
@@ -674,3 +671,68 @@
   font-weight: 700;
   margin: 0 0 1rem 0;
 }
+
+/* Program table in calendar days */
+.workout-programs-table {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.program-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 0.5fr;
+  gap: 0.25rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.7rem;
+  align-items: center;
+}
+
+.program-row:last-child {
+  border-bottom: none;
+}
+
+.program-name-col {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-link {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.program-link:hover {
+  color: var(--fitiva-orange);
+  text-decoration: underline;
+}
+
+.program-focus-col {
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-exercises-col {
+  color: var(--text-secondary);
+  text-align: right;
+  font-weight: 600;
+}
+
+.total-count {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-medium);
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+

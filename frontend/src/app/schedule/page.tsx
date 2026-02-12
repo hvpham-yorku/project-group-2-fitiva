@@ -14,6 +14,9 @@ interface CalendarEvent {
     name: string;
     type: string;
     exercise_count: number;
+    program_id: number;
+    program_name: string;
+    focus: string;
   }>;
   section_type: string;
   exercise_count: number;
@@ -341,14 +344,38 @@ const SchedulePage = () => {
                         ) : (
                           <div className="workout-indicator">
                             <span className="workout-icon">🏋️</span>
-                            {event.sections && event.sections.map((section, idx) => (
-                              <span key={idx} className="workout-name">
-                                {section.name}
-                              </span>
-                            ))}
-                            <span className="exercise-count">
-                              {event.exercise_count} exercises
-                            </span>
+
+                            {/* Program info in table format */}
+                            {event.sections && event.sections.length > 0 && (
+                              <div className="workout-programs-table">
+                                {event.sections.map((section, idx) => (
+                                  <div key={idx} className="program-row">
+                                    <div className="program-name-col">
+                                      <a 
+                                        href={`/program/${section.program_id}`}
+                                        className="program-link"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          router.push(`/program/${section.program_id}`);
+                                        }}
+                                      >
+                                        {section.program_name}
+                                      </a>
+                                    </div>
+                                    <div className="program-focus-col">
+                                      {typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}
+                                    </div>
+                                    <div className="program-exercises-col">
+                                      {section.exercise_count}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="total-count">
+                              {event.exercise_count} total
+                            </div>
                           </div>
                         )}
                       </div>
@@ -358,99 +385,99 @@ const SchedulePage = () => {
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Workout Detail Modal */}
-        {showWorkoutModal && workoutDetail && (
-          <div className="modal-overlay" onClick={() => setShowWorkoutModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>
-                  {workoutDetail.is_rest_day ? '😴 Rest Day' : `🏋️ Workout Day`}
-                </h3>
-                <button 
-                  className="modal-close"
-                  onClick={() => setShowWorkoutModal(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="modal-body">
-                <div className="workout-date">
-                  {new Date(workoutDetail.date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
+          {/* Workout Detail Modal */}
+          {showWorkoutModal && workoutDetail ? (
+            <div className="modal-overlay" onClick={() => setShowWorkoutModal(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>
+                    {workoutDetail.is_rest_day ? '😴 Rest Day' : '🏋️ Workout Day'}
+                  </h3>
+                  <button 
+                    className="modal-close"
+                    onClick={() => setShowWorkoutModal(false)}
+                  >
+                    ✕
+                  </button>
                 </div>
 
-                {workoutDetail.is_rest_day ? (
-                  <div className="rest-message">
-                    <p>{workoutDetail.message}</p>
+                <div className="modal-body">
+                  <div className="workout-date">
+                    {new Date(workoutDetail.date).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
                   </div>
-                ) : (
-                  <>
-                    {workoutDetail.workouts && workoutDetail.workouts.map((workout: any, workoutIdx: number) => (
-                      <div key={workoutIdx} className="workout-section-detail">
-                        <h4 className="workout-program-name">
-                          {workout.program_name} - {workout.section.format}
-                        </h4>
-                        
-                        {workout.section.exercises && workout.section.exercises.length > 0 && (
-                          <div className="exercises-section">
-                            {workout.section.exercises.map((exercise: any, index: number) => (
-                              <div key={exercise.id} className="exercise-detail">
-                                <div className="exercise-detail-header">
-                                  <span className="exercise-number">{index + 1}</span>
-                                  <h5>{exercise.name}</h5>
-                                </div>
 
-                                <table className="sets-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Set</th>
-                                      <th>Reps</th>
-                                      <th>Time</th>
-                                      <th>Rest</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {exercise.sets.map((set: any) => (
-                                      <tr key={set.id}>
-                                        <td>{set.set_number}</td>
-                                        <td>{set.reps || '-'}</td>
-                                        <td>{set.time ? formatTime(set.time) : '-'}</td>
-                                        <td>{formatTime(set.rest)}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    <div className="modal-actions">
-                      <button 
-                        className="btn-start-workout"
-                        onClick={() => {
-                          setShowWorkoutModal(false);
-                          alert('Start workout feature coming soon!');
-                        }}
-                      >
-                        ▶️ Start Workout
-                      </button>
+                  {workoutDetail.is_rest_day ? (
+                    <div className="rest-message">
+                      <p>{workoutDetail.message}</p>
                     </div>
-                  </>
-                )}
+                  ) : (
+                    <>
+                      {workoutDetail.workouts && workoutDetail.workouts.map((workout: any, workoutIdx: number) => (
+                        <div key={workoutIdx} className="workout-section-detail">
+                          <h4 className="workout-program-name">
+                            {workout.program_name} - {workout.section.format}
+                          </h4>
+                          
+                          {workout.section.exercises && workout.section.exercises.length > 0 && (
+                            <div className="exercises-section">
+                              {workout.section.exercises.map((exercise: any, index: number) => (
+                                <div key={exercise.id} className="exercise-detail">
+                                  <div className="exercise-detail-header">
+                                    <span className="exercise-number">{index + 1}</span>
+                                    <h5>{exercise.name}</h5>
+                                  </div>
+
+                                  <table className="sets-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Set</th>
+                                        <th>Reps</th>
+                                        <th>Time</th>
+                                        <th>Rest</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {exercise.sets.map((set: any) => (
+                                        <tr key={set.id}>
+                                          <td>{set.set_number}</td>
+                                          <td>{set.reps || '-'}</td>
+                                          <td>{set.time ? formatTime(set.time) : '-'}</td>
+                                          <td>{formatTime(set.rest)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      <div className="modal-actions">
+                        <button 
+                          className="btn-start-workout"
+                          onClick={() => {
+                            setShowWorkoutModal(false);
+                            alert('Start workout feature coming soon!');
+                          }}
+                        >
+                          ▶️ Start Workout
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          ) : null}
+        </div>
       </div>
     </ProtectedRoute>
   );
