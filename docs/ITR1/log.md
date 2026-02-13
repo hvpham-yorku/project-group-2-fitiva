@@ -133,6 +133,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 - Shared individual strengths and preferred tasks
 - Set meeting cadence (2 meetings/week)
 - Brainstormed potential project ideas and app name
+
 **Decisions:**
 - Agreed on meeting cadence and collaboration expectations
 - Began ideation and direction-setting for project scope
@@ -143,6 +144,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Confirmed project topic and initial deliverable checklist
 - Set up project tracking tools (Jira + GitHub repo structure)
+
 **Decisions:**
 - Jira board created and workflow started
 - GitHub repository structure initialized
@@ -153,6 +155,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Defined big stories and initial user stories
 - Refined Fitiva vision statement and core features
+
 **Decisions:**
 - Finalized **4 big stories**
 - Drafted **5–6 initial user stories**
@@ -164,6 +167,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Reviewed Iteration 0 submission for completeness
 - Planned and divided ITR1 tasks and stories
+
 **Decisions:**
 - Each team member assigned at least one user story for ITR1 implementation
 
@@ -173,6 +177,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Revised planning document for submission quality and clarity
 - Confirmed estimates + scope for ITR1
+
 **Decisions:**
 - Team began implementation work on assigned stories
 
@@ -182,6 +187,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Environment setup using Docker
 - Verified initial project runs in containers without blocking issues
+
 **Decisions:**
 - All members confirmed environment setup and started coding assigned tasks
 
@@ -191,6 +197,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Finalized logo + signature color for Fitiva
 - Progress update: **US 1.1 (Register/Login) completed**
+
 **Decisions:**
 - Began moving to: **US 1.2, 1.3, 1.4, 1.5, 1.6** (next implementation targets)
 
@@ -200,6 +207,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Implementation progress updates by each member
 - Status: **US 1.1, 1.2, 1.3 completed by this point**
+
 **Decisions:**
 - Continued implementation on remaining assigned stories and integration work
 
@@ -209,6 +217,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Agenda:**
 - Progress updates by each member
 - Status: **US 1.4, 1.5, 1.6 completed by this point**
+
 **Decisions:**
 - Finish all ITR1 documentation
 - Final coding touches for US 1.1–1.6
@@ -221,6 +230,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 - Final review of ITR1 documentation for submission readiness
 - Demo/review: features for **US 3.1 & US 3.6**
 - Assigned at least one story per member to begin ITR2 planning
+
 **Decisions:**
 - Iteration 2 user stories selected and initial assignments discussed
 
