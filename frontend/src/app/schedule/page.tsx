@@ -22,6 +22,8 @@ interface CalendarEvent {
   }>;
   section_type: string;
   exercise_count: number;
+  session_status?: 'in_progress' | 'completed' | null;
+
 }
 
 interface Program {
@@ -158,6 +160,32 @@ const SchedulePage = () => {
       showError('Failed to load workout details');
     }
   };
+
+  const startSession = async (dateStr: string) => {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/sessions/start/${dateStr}/`,
+    { method: 'POST', credentials: 'include' }
+  );
+
+  if (!res.ok) throw new Error('Failed to start session');
+  return res.json();
+};
+
+const completeSession = async (dateStr: string) => {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/sessions/complete/${dateStr}/`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    }
+  );
+
+  if (!res.ok) throw new Error('Failed to complete session');
+  return res.json();
+};
+
 
   const handleDateClick = (event: CalendarEvent) => {
     setSelectedDate(event.date);
@@ -558,16 +586,50 @@ const SchedulePage = () => {
                       ))}
 
                       <div className="modal-actions">
-                        <button 
-                          className="btn-start-workout"
-                          onClick={() => {
-                            setShowWorkoutModal(false);
-                            showInfo('Start workout feature coming soon!');
+                  {/* If completed, show label */}
+                  {workoutDetail.session_status === 'completed' ? (
+                    <div className="workout-completed-label">✅ Completed</div>
+                  ) : (
+                    <>
+                      {/* Start / Continue button */}
+                      <button
+                        className="btn-start-workout"
+                        onClick={async () => {
+                          try {
+                            await startSession(workoutDetail.date);
+                            showSuccess('Workout started!');
+                            await fetchSchedule(); // refresh badges
+                            await fetchWorkoutForDate(workoutDetail.date); // refresh modal status
+                          } catch (e) {
+                            showError('Could not start workout.');
+                          }
+                        }}
+                      >
+                        {workoutDetail.session_status === 'in_progress' ? '▶️ Continue Workout' : '▶️ Start Workout'}
+                      </button>
+
+                      {/* Complete button only when in_progress */}
+                      {workoutDetail.session_status === 'in_progress' && (
+                        <button
+                          className="btn-complete-workout"
+                          onClick={async () => {
+                            try {
+                              await completeSession(workoutDetail.date);
+                              showSuccess('Workout completed!');
+                              await fetchSchedule();
+                              await fetchWorkoutForDate(workoutDetail.date);
+                            } catch {
+                              showError('Could not complete workout.');
+                            }
                           }}
                         >
-                          ▶️ Start Workout
+                          ✅ Complete
                         </button>
-                      </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
                     </>
                   )}
                 </div>

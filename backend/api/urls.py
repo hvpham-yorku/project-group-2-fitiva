@@ -66,6 +66,10 @@ urlpatterns = [
     path('schedule/remove-program/<int:program_id>/', views.remove_program_from_schedule, name='remove-program-from-schedule'),  
     path('schedule/check-program/<int:program_id>/', views.check_program_in_schedule, name='check-program-in-schedule'),  
     path('schedule/<int:schedule_id>/update-start-date/', views.update_schedule_start_date),
+    path('sessions/start/<str:date_str>/', views.start_workout_session),
+    path('sessions/complete/<str:date_str>/', views.complete_workout_session),
+
+
 
 
     

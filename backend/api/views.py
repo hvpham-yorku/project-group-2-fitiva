@@ -17,6 +17,9 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from datetime import datetime
+from django.utils import timezone
+
 
 from .authentication import CsrfExemptSessionAuthentication
 from .models import (
@@ -854,6 +857,12 @@ def get_active_schedule(request):
         # Add calendar events for the next 4 weeks
         calendar_events = []
         start_date = schedule.start_date
+        end_date = start_date + timedelta(days=27)  # 4 weeks = 28 days
+        sessions = WorkoutSession.objects.filter(
+            user=request.user,
+            date__range=[start_date, end_date]
+        )
+        status_by_date = {s.date.isoformat(): s.status for s in sessions}
         days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
         
         for week in range(4):
@@ -867,7 +876,8 @@ def get_active_schedule(request):
                         'day': day_name,
                         'sections': [],
                         'section_type': 'rest',
-                        'exercise_count': 0
+                        'exercise_count': 0,
+                        'session_status': status_by_date.get(event_date.isoformat())
                     })
                 else:
                     # Get all sections for this day
@@ -904,7 +914,9 @@ def get_active_schedule(request):
                         'day': day_name,
                         'sections': sections,
                         'section_type': 'workout' if sections else 'rest',
-                        'exercise_count': total_exercises
+                        'exercise_count': total_exercises,
+                        'session_status': status_by_date.get(event_date.isoformat())
+                        
                     })
         
         return Response({
@@ -963,7 +975,8 @@ def get_workout_for_date(request, date_str):
             {"error": "Invalid date format. Use YYYY-MM-DD"},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+    session = WorkoutSession.objects.filter(user=request.user, date=target_date).first()
+    session_status = session.status if session else None
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
@@ -985,7 +998,8 @@ def get_workout_for_date(request, date_str):
             'date': date_str,
             'is_rest_day': True,
             'message': 'Rest day - recovery is important!',
-            'workouts': []
+            'workouts': [],
+            'session_status': session_status
         }, status=status.HTTP_200_OK)
     
     # Get all sections for this day
@@ -1005,9 +1019,81 @@ def get_workout_for_date(request, date_str):
         'date': date_str,
         'is_rest_day': False,
         'workouts': workouts,
-        'total_exercises': sum(len(w['section']['exercises']) for w in workouts)
+        'total_exercises': sum(len(w['section']['exercises']) for w in workouts),
+        'session_status': session_status
     }, status=status.HTTP_200_OK)
 
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def start_workout_session(request, date_str):
+    """Create (or reuse) today's session and mark it in_progress."""
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    session, created = WorkoutSession.objects.get_or_create(
+        user=request.user,
+        date=target_date,
+        defaults={"status": "in_progress", "is_completed": False}
+    )
+
+    # If it already existed and was completed, keep it completed (don’t “uncomplete”)
+    if session.status != "completed":
+        session.status = "in_progress"
+        session.is_completed = False
+        session.save()
+
+    return Response({
+        "message": "Workout session started",
+        "date": session.date.isoformat(),
+        "status": session.status,
+        "is_completed": session.is_completed,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def complete_workout_session(request, date_str):
+    """Mark today's session completed."""
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    session, _ = WorkoutSession.objects.get_or_create(
+        user=request.user,
+        date=target_date,
+        defaults={"status": "in_progress", "is_completed": False}
+    )
+
+    duration_minutes = request.data.get("duration_minutes")
+    notes = request.data.get("notes", "")
+
+    session.status = "completed"
+    session.is_completed = True
+
+    if duration_minutes is not None:
+        try:
+            session.duration_minutes = int(duration_minutes)
+        except ValueError:
+            return Response({"error": "duration_minutes must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if notes is not None:
+        session.notes = notes
+
+    session.save()
+
+    return Response({
+        "message": "Workout session completed",
+        "date": session.date.isoformat(),
+        "status": session.status,
+        "is_completed": session.is_completed,
+        "duration_minutes": session.duration_minutes,
+        "notes": session.notes,
+    }, status=status.HTTP_200_OK)
 
 @api_view(['DELETE'])
 @authentication_classes([CsrfExemptSessionAuthentication])
