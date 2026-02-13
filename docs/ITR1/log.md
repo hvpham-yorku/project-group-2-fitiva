@@ -321,6 +321,7 @@ For each story, we list the key tasks so the TA can see real work.
   - `frontend/src` frontend source code
   - `backend/` backend container
   - `backend/api` backend source code
+  - `backend/api/tests` test cases folder
   - `docs/` planning documents (ITR0 + ITR1 (log.md, etc.)
   - `Github Wiki` wiki + architecture sketch references
 
