@@ -254,9 +254,15 @@ class ExerciseSet(models.Model):
 
 class WorkoutSession(models.Model):
     """Individual workout session completed by a user."""
+
+    STATUS_CHOICES = [
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sessions')
     plan = models.ForeignKey(WorkoutPlan, on_delete=models.SET_NULL, null=True)
     date = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
     duration_minutes = models.IntegerField(null=True, blank=True)
     is_completed = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
@@ -264,6 +270,9 @@ class WorkoutSession(models.Model):
 
     class Meta:
         db_table = 'workout_sessions'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'date'], name='unique_session_per_user_per_day')
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {self.date}"

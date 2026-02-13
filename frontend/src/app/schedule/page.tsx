@@ -22,6 +22,8 @@ interface CalendarEvent {
   }>;
   section_type: string;
   exercise_count: number;
+  session_status?: 'in_progress' | 'completed' | null;
+
 }
 
 interface Program {
@@ -158,6 +160,32 @@ const SchedulePage = () => {
       showError('Failed to load workout details');
     }
   };
+
+  const startSession = async (dateStr: string) => {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/sessions/start/${dateStr}/`,
+    { method: 'POST', credentials: 'include' }
+  );
+
+  if (!res.ok) throw new Error('Failed to start session');
+  return res.json();
+};
+
+const completeSession = async (dateStr: string) => {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/sessions/complete/${dateStr}/`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    }
+  );
+
+  if (!res.ok) throw new Error('Failed to complete session');
+  return res.json();
+};
+
 
   const handleDateClick = (event: CalendarEvent) => {
     setSelectedDate(event.date);
@@ -430,10 +458,12 @@ const SchedulePage = () => {
                     >
                       <div className="day-header">
                         <span className="day-name">{event.day}</span>
+
                         <span className="day-date">
                           {new Date(event.date).getDate()}
                         </span>
                       </div>
+
 
                       <div className="day-content">
                         {event.section_type === 'rest' ? (
@@ -451,18 +481,37 @@ const SchedulePage = () => {
                                 {event.sections.map((section, idx) => (
                                   <div key={idx} className="program-row">
                                     <div className="program-name-col">
-                                      <a 
-                                        href={`/program/${section.program_id}`}
-                                        className="program-link"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          router.push(`/program/${section.program_id}`);
-                                        }}
-                                      >
-                                        {section.program_name}
-                                      </a>
-                                      <div className="program-focus-col">
-                                        {typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}
+                                      <div className="program-name-line">
+                                        <a 
+                                          href={`/program/${section.program_id}`}
+                                          className="program-link"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/program/${section.program_id}`);
+                                          }}
+                                        >
+                                          {section.program_name}
+                                        </a>
+                                      </div>
+                                      <div className="program-focus-line">
+                                        <span className="program-focus-text">
+                                          {typeof section.focus === 'string'
+                                            ? section.focus
+                                            : Array.isArray(section.focus)
+                                              ? (section.focus as string[]).slice(0, 2).join(', ')
+                                              : 'N/A'}
+                                        </span>
+
+                                        {event.session_status === 'completed' && (
+                                          <span className="program-complete-badge">
+                                            ✅ Complete
+                                          </span>
+                                        )}
+                                        {event.session_status === 'in_progress' && (
+                                          <span className="program-inprogress-badge">
+                                           In Progress
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -557,17 +606,51 @@ const SchedulePage = () => {
                         </div>
                       ))}
 
-                      <div className="modal-actions">
-                        <button 
+                    <div className="modal-actions">
+                      {/* Completed state */}
+                      {workoutDetail.session_status === 'completed' && (
+                        <div className="workout-completed-label">✅ Completed</div>
+                      )}
+
+                      {/* No session yet -> show Start */}
+                      {!workoutDetail.session_status && (
+                        <button
                           className="btn-start-workout"
-                          onClick={() => {
-                            setShowWorkoutModal(false);
-                            showInfo('Start workout feature coming soon!');
+                          onClick={async () => {
+                            try {
+                              await startSession(workoutDetail.date);
+                              showSuccess('Workout started!');
+                              await fetchSchedule();
+                              await fetchWorkoutForDate(workoutDetail.date);
+                            } catch (e) {
+                              showError('Could not start workout.');
+                            }
                           }}
                         >
                           ▶️ Start Workout
                         </button>
-                      </div>
+                      )}
+
+                      {/* In progress -> ONLY show Complete (no Continue button) */}
+                      {workoutDetail.session_status === 'in_progress' && (
+                        <button
+                          className="btn-complete-workout"
+                          onClick={async () => {
+                            try {
+                              await completeSession(workoutDetail.date);
+                              showSuccess('Workout completed!');
+                              await fetchSchedule();
+                              await fetchWorkoutForDate(workoutDetail.date);
+                            } catch {
+                              showError('Could not complete workout.');
+                            }
+                          }}
+                        >
+                          ✅ Complete
+                        </button>
+                      )}
+                    </div>
+
                     </>
                   )}
                 </div>
