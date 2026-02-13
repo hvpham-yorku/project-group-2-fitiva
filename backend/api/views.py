@@ -887,7 +887,39 @@ def get_active_schedule(request):
             'schedule': None,
             'calendar_events': []
         }, status=status.HTTP_200_OK)
-
+@api_view(['PATCH'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def update_schedule_start_date(request, schedule_id):
+    """Update the start date of a schedule."""
+    try:
+        schedule = UserSchedule.objects.get(id=schedule_id, user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response(
+            {"error": "Schedule not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    new_start_date = request.data.get('start_date')
+    if not new_start_date:
+        return Response(
+            {"error": "start_date is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        schedule.start_date = datetime.strptime(new_start_date, '%Y-%m-%d').date()
+        schedule.save()
+        
+        return Response({
+            "message": "Start date updated successfully",
+            "new_start_date": schedule.start_date.isoformat()
+        }, status=status.HTTP_200_OK)
+    except ValueError:
+        return Response(
+            {"error": "Invalid date format. Use YYYY-MM-DD"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])

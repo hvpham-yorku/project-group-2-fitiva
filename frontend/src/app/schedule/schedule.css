@@ -736,4 +736,95 @@
   text-align: center;
 }
 
+/* Editable start date */
+.stat-value-editable {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.stat-value-editable:hover {
+  background: var(--bg-tertiary);
+}
+
+.edit-icon {
+  font-size: 0.85rem;
+  opacity: 0.6;
+}
+
+.date-edit-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.date-input {
+  padding: 0.5rem;
+  border: 2px solid var(--border-medium);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.date-edit-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-save-date,
+.btn-cancel-date {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-save-date {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-save-date:hover {
+  background: #45a049;
+}
+
+.btn-cancel-date {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.btn-cancel-date:hover {
+  background: var(--border-medium);
+}
+
+/* Clickable program chips */
+.program-chip-clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.program-chip-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: var(--primary);
+}
+
 

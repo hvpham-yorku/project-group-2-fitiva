@@ -55,6 +55,8 @@ const SchedulePage = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [workoutDetail, setWorkoutDetail] = useState<any>(null);
   const [showWorkoutModal, setShowWorkoutModal] = useState(false);
+  const [editingStartDate, setEditingStartDate] = useState(false);
+  const [newStartDate, setNewStartDate] = useState('');
 
   useEffect(() => {
     fetchSchedule();
@@ -78,6 +80,38 @@ const SchedulePage = () => {
       console.error('Error fetching schedule:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateStartDate = async () => {
+    if (!newStartDate || !scheduleData?.schedule) return;
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/${scheduleData.schedule.id}/update-start-date/`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            start_date: newStartDate
+          })
+        }
+      );
+
+      if (response.ok) {
+        alert('✅ Start date updated!');
+        setEditingStartDate(false);
+        fetchSchedule();
+      } else {
+        const errorData = await response.json();
+        alert(`❌ ${errorData.error || 'Failed to update start date'}`);
+      }
+    } catch (error) {
+      console.error('Error updating start date:', error);
+      alert('❌ Error updating start date. Please try again.');
     }
   };
 
@@ -258,13 +292,17 @@ const SchedulePage = () => {
               </button>
             </div>
 
-            {/* Show all programs in schedule */}
+            {/* Show all programs in schedule - CLICKABLE */}
             {schedule.program_list && schedule.program_list.length > 0 && (
               <div className="programs-in-schedule">
                 <h4>Programs in Schedule ({schedule.program_list.length})</h4>
                 <div className="program-chips">
                   {schedule.program_list.map((program) => (
-                    <div key={program.id} className="program-chip">
+                    <div 
+                      key={program.id} 
+                      className="program-chip program-chip-clickable"
+                      onClick={() => router.push(`/program/${program.id}`)}
+                    >
                       <span className="program-chip-name">{program.name}</span>
                       <span className={`program-chip-difficulty difficulty-${program.difficulty}`}>
                         {program.difficulty}
@@ -287,15 +325,51 @@ const SchedulePage = () => {
                   </span>
                 </div>
               </div>
+
+              {/* EDITABLE START DATE */}
               <div className="stat-box">
                 <span className="stat-icon">📅</span>
                 <div className="stat-content">
                   <span className="stat-label">Start Date</span>
-                  <span className="stat-value">
-                    {new Date(schedule.start_date).toLocaleDateString()}
-                  </span>
+                  {editingStartDate ? (
+                    <div className="date-edit-section">
+                      <input
+                        type="date"
+                        className="date-input"
+                        value={newStartDate}
+                        onChange={(e) => setNewStartDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                      <div className="date-edit-buttons">
+                        <button className="btn-save-date" onClick={handleUpdateStartDate}>
+                          ✓
+                        </button>
+                        <button 
+                          className="btn-cancel-date" 
+                          onClick={() => {
+                            setEditingStartDate(false);
+                            setNewStartDate('');
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div 
+                      className="stat-value-editable" 
+                      onClick={() => {
+                        setEditingStartDate(true);
+                        setNewStartDate(schedule.start_date);
+                      }}
+                    >
+                      {new Date(schedule.start_date).toLocaleDateString()}
+                      <span className="edit-icon">✏️</span>
+                    </div>
+                  )}
                 </div>
               </div>
+
               <div className="stat-box">
                 <span className="stat-icon">📊</span>
                 <div className="stat-content">
