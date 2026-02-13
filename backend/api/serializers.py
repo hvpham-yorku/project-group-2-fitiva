@@ -444,6 +444,54 @@ class WorkoutPlanSerializer(serializers.ModelSerializer):
 
         return plan
 
+    def update(self, instance, validated_data):
+        """Update workout plan with nested sections, exercises, and sets."""
+        sections_data = validated_data.pop('sections', None)
+        
+        # Update basic fields (except name, which is prevented in the view)
+        instance.description = validated_data.get('description', instance.description)
+        instance.focus = validated_data.get('focus', instance.focus)
+        instance.difficulty = validated_data.get('difficulty', instance.difficulty)
+        instance.weekly_frequency = validated_data.get('weekly_frequency', instance.weekly_frequency)
+        instance.session_length = validated_data.get('session_length', instance.session_length)
+        instance.save()
+        
+        # If sections data provided, update sections
+        if sections_data is not None:
+            # Delete existing sections (cascade will delete exercises and sets)
+            instance.sections.all().delete()
+            
+            # Create new sections with exercises and sets
+            for section_order, section_data in enumerate(sections_data):
+                exercises_data = section_data.pop('exercises', [])
+                section = ProgramSection.objects.create(
+                    program=instance,
+                    format=section_data.get('format', ''),
+                    type=section_data.get('type', ''),
+                    is_rest_day=section_data.get('is_rest_day', False),
+                    order=section_order
+                )
+                
+                # Create exercises for this section
+                for exercise_order, exercise_data in enumerate(exercises_data):
+                    sets_data = exercise_data.pop('sets', [])
+                    exercise = Exercise.objects.create(
+                        section=section,
+                        name=exercise_data.get('name', ''),
+                        order=exercise_order
+                    )
+                    
+                    # Create sets for this exercise
+                    for set_data in sets_data:
+                        ExerciseSet.objects.create(
+                            exercise=exercise,
+                            set_number=set_data.get('set_number'),
+                            reps=set_data.get('reps'),
+                            time=set_data.get('time'),
+                            rest=set_data.get('rest', 0)
+                        )
+    
+        return instance
 
 
 
