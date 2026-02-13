@@ -71,7 +71,7 @@ const SchedulePage = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Schedule data:', data); // Debug
+        console.log('Schedule data:', data);
         setScheduleData(data);
       }
     } catch (error) {
@@ -345,7 +345,7 @@ const SchedulePage = () => {
                           <div className="workout-indicator">
                             <span className="workout-icon">🏋️</span>
 
-                            {/* Program info in table format */}
+                            {/* Program info in simplified format */}
                             {event.sections && event.sections.length > 0 && (
                               <div className="workout-programs-table">
                                 {event.sections.map((section, idx) => (
@@ -361,12 +361,9 @@ const SchedulePage = () => {
                                       >
                                         {section.program_name}
                                       </a>
-                                    </div>
-                                    <div className="program-focus-col">
-                                      {typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}
-                                    </div>
-                                    <div className="program-exercises-col">
-                                      {section.exercise_count}
+                                      <div className="program-focus-col">
+                                        {typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}
+                                      </div>
                                     </div>
                                   </div>
                                 ))}

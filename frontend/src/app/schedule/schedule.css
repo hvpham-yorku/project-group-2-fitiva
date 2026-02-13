@@ -680,7 +680,7 @@
 
 .program-row {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 0.5fr;
+  grid-template-columns: 1fr;
   gap: 0.25rem;
   padding: 0.4rem 0;
   border-bottom: 1px solid var(--border-light);
@@ -697,10 +697,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color:var(--text-primary)
 }
 
 .program-link {
-  color: var(--primary);
+  color: var(--text-primary);
   text-decoration: none;
   transition: color 0.2s;
 }
@@ -717,12 +718,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 0.20rem;
 }
 
+/* use to show # of exercises */
 .program-exercises-col {
-  color: var(--text-secondary);
-  text-align: right;
-  font-weight: 600;
+  display:none;
 }
 
 .total-count {
