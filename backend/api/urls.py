@@ -2,8 +2,10 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 
+
 router = DefaultRouter()
 router.register(r'programs', views.WorkoutProgramViewSet, basename='program')
+
 
 urlpatterns = [
     # ========================================
@@ -36,7 +38,9 @@ urlpatterns = [
     # Other Endpoints
     # ========================================
     path('recommendations/', views.get_recommendations, name='recommendations'),
-    path('programs/<int:program_id>/', views.get_program_detail, name='program-detail'),
+    
+    # REMOVED: path('programs/<int:program_id>/', views.get_program_detail, name='program-detail'),
+    # The router now handles this via WorkoutProgramViewSet
     
     # ========================================
     # Exercise Template Endpoints
@@ -46,7 +50,9 @@ urlpatterns = [
     
     # ========================================
     # Router URLs (WorkoutProgramViewSet)
-    # Generates: /programs/, /programs/{id}/
+    # Generates: 
+    #   - GET/POST /programs/
+    #   - GET/PUT/DELETE /programs/{id}/
     # ========================================
     path('', include(router.urls)),
 

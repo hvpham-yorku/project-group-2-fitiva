@@ -101,27 +101,35 @@ const config: RequestInit = {
   credentials: 'include',
 };
 
-  try {
-    const response = await fetch(url, config);
-    const data = await response.json();
+try {
+  const response = await fetch(url, config);
+  
+  // Handle 204 No Content (successful delete with no body)
+  if (response.status === 204) {
+    return {} as T;
+  }
+  
+  const data = await response.json();
 
-    if (!response.ok) {
-      // Handle different error types
-      if (response.status === 401) {
-        throw new ApiError('Unauthorized', 401);
-      } else if (response.status === 400 && data.errors) {
-        throw new ApiError('Validation Error', 400, data.errors);
-      } else if (response.status === 500) {
-        throw new ApiError('Server Error', 500);
-      } else {
-        throw new ApiError(
-          data.detail || data.message || 'An error occurred',
-          response.status
-        );
-      }
+  if (!response.ok) {
+    // Handle different error types
+    if (response.status === 401) {
+      throw new ApiError('Unauthorized', 401);
+    } else if (response.status === 400 && data.errors) {
+      throw new ApiError('Validation Error', 400, data.errors);
+    } else if (response.status === 500) {
+      throw new ApiError('Server Error', 500);
+    } else {
+      throw new ApiError(
+        data.detail || data.message || 'An error occurred',
+        response.status
+      );
     }
+  }
 
-    return data as T;
+  return data as T;
+
+
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -265,6 +273,89 @@ export const publicProfileAPI = {
     });
   },
 };
+
+
+// Program Management API
+export const programAPI = {
+  // Get single program details
+  getProgram: async (programId: number): Promise<{
+    id: number;
+    name: string;
+    description: string;
+    focus: string[];
+    difficulty: string;
+    weekly_frequency: number;
+    session_length: number;
+    trainer: number;
+    trainer_name: string;
+    created_at: string;
+    updated_at: string;
+    sections: Array<{
+      id: number;
+      format: string;
+      type: string;
+      is_rest_day: boolean;
+      order: number;
+      exercises: Array<{
+        id: number;
+        name: string;
+        order: number;
+        sets: Array<{
+          id: number;
+          set_number: number;
+          reps: number | null;
+          time: number | null;
+          rest: number;
+        }>;
+      }>;
+    }>;
+  }> => {
+    return fetchAPI(`/api/programs/${programId}/`, {
+      method: 'GET',
+    });
+  },
+
+  // Update program
+  updateProgram: async (
+    programId: number,
+    programData: {
+      description: string;
+      focus: string[];
+      difficulty: string;
+      weekly_frequency: number;
+      session_length: number;
+      sections: Array<{
+        format: string;
+        type: string;
+        is_rest_day: boolean;
+        order: number;
+        exercises: Array<{
+          name: string;
+          order: number;
+          sets: Array<{
+            set_number: number;
+            reps: number | null;
+            time: number | null;
+            rest: number;
+          }>;
+        }>;
+      }>;
+    }
+  ): Promise<any> => {
+    return fetchAPI(`/api/programs/${programId}/`, {
+      method: 'PUT',
+      body: JSON.stringify(programData),
+    });
+  },
+
+  // Delete program (soft delete)
+  deleteProgram: async (programId: number): Promise<void> => {
+    return fetchAPI(`/api/programs/${programId}/`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 
 // Trainer API for own profiles only
 export const trainerAPI = {

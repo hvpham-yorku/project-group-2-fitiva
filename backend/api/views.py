@@ -289,7 +289,16 @@ def get_trainer_programs(request, user_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    programs = WorkoutPlan.objects.filter(trainer=user).order_by('-created_at')
+    # Check if we should include deleted programs (for stats)
+    include_deleted = request.GET.get('include_deleted', 'false').lower() == 'true'
+    
+    if include_deleted:
+        # For stats: return all programs including deleted
+        programs = WorkoutPlan.objects.filter(trainer=user).order_by('-created_at')
+    else:
+        # For display: return only non-deleted programs
+        programs = WorkoutPlan.objects.filter(trainer=user, is_deleted=False).order_by('-created_at')
+    
     serializer = WorkoutPlanSerializer(programs, many=True)
     
     return Response({
@@ -347,8 +356,8 @@ class WorkoutProgramViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Return all workout programs ordered by creation date."""
-        return WorkoutPlan.objects.all().select_related('trainer').order_by('-created_at')
+        """Return all non-deleted workout programs ordered by creation date."""
+        return WorkoutPlan.objects.filter(is_deleted=False).select_related('trainer').order_by('-created_at')
 
     def perform_create(self, serializer):
         """Set the trainer to the current user when creating a new plan."""
@@ -357,21 +366,43 @@ class WorkoutProgramViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "Only trainers can create workout programs"})
         serializer.save(trainer=self.request.user)
     
-    def perform_update(self, serializer):
-        """Ensure only the program owner can update it."""
-        if not self.request.user.is_trainer:
+    def update(self, request, *args, **kwargs):
+        """Update a workout program with nested sections, exercises, and sets."""
+        instance = self.get_object()
+        
+        # Check permissions
+        if not request.user.is_trainer:
             raise ValidationError({"detail": "Only trainers can update workout programs"})
-        if serializer.instance.trainer != self.request.user:
+        if instance.trainer != request.user:
             raise ValidationError({"detail": "You can only update your own programs"})
-        serializer.save()
-    
+        
+        # Prevent changing the name
+        if 'name' in request.data and request.data['name'] != instance.name:
+            raise ValidationError({"detail": "Program name cannot be changed"})
+        
+        # Get the serializer and validate
+        serializer = self.get_serializer(instance, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        
+        # Call the serializer's custom update method directly
+        updated_instance = serializer.update(instance, serializer.validated_data)
+        
+        # Serialize the updated instance for response
+        response_serializer = self.get_serializer(updated_instance)
+        return Response(response_serializer.data)
+
+
+
     def perform_destroy(self, instance):
-        """Ensure only the program owner can delete it."""
+        """Soft delete: Set is_deleted to True instead of deleting."""
         if not self.request.user.is_trainer:
             raise ValidationError({"detail": "Only trainers can delete workout programs"})
         if instance.trainer != self.request.user:
             raise ValidationError({"detail": "You can only delete your own programs"})
-        instance.delete()
+        
+        # Soft delete
+        instance.is_deleted = True
+        instance.save()
 
 
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
