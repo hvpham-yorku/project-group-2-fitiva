@@ -28,8 +28,6 @@ MANIFEST
 .pytest_cache/
 .coverage
 htmlcov/
-.env
-.env.local
 db.sqlite3
 
 # Node
@@ -55,3 +53,6 @@ dist/
 # Database
 *.sql
 mysql_data/
+
+# Note: .env files are tracked for easy deployment (dev environment only)
+# backend/.env and frontend/.env.local contain non-sensitive dev configurations
