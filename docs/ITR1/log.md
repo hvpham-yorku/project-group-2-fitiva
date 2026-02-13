@@ -245,7 +245,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 |------------|----------|---------------|--------|-------|
 | US 1.1 – Register & Log In | Ege, Weiqin | 4 days | Completed | Full authentication system with password validation and session-based login |
 | US 1.2 – Create Fitness Profile | Arshia, Raha | 4 days | Completed | Profile auto-created on signup, editable via modal with validation |
-| US 1.3 – View Profile-Based Workout Recommendations | — | 2 days | Not Started | Recommendation algorithm and matching logic not yet implemented |
+| US 1.3 – View Profile-Based Workout Recommendations | Ege | 2 days | Completed | Recommendation works by matching user focus with the program focus |
 | US 1.4 – Trainer Program Creation & Browsing | Ege | 3 days | Completed | Program creation (Mon–Sun structure), exercise library, sets config, drag-and-drop, program listing |
 | US 1.5 – Select Training Plan & Auto-Generate Weekly Schedule | Shiah | 2 days | Not Started | Plan selection and 7-day schedule generation pending |
 | US 1.6 Profile-Based Recommendations | Ege | 2d | Done | Derived list from profile |
