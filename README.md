@@ -1,7 +1,5 @@
 # Fitiva - Workout Training Planner
 
-**Course**: EECS 2311 Z Winter 2026 | **Team**: Group 2
-
 Fitiva is a web application for personalized workout planning, serving both fitness enthusiasts and trainers.
 
 ## Team
