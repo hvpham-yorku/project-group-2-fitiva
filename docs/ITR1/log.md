@@ -243,61 +243,61 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 
 | User Story | Owner(s) | Estimated Time | Status | Notes |
 |------------|----------|---------------|--------|-------|
-| US 1.1 – Register & Log In | Ege, Weiqin | 4 days | Completed | Full authentication system with password validation and session-based login |
-| US 1.2 – Create Fitness Profile | Arshia, Raha | 4 days | Completed | Profile auto-created on signup, editable via modal with validation |
-| US 1.3 – View Profile-Based Workout Recommendations | Ege | 2 days | Completed | Recommendation works by matching user focus with the program focus |
-| US 1.4 – Trainer Program Creation & Browsing | Ege | 3 days | Completed | Program creation (Mon–Sun structure), exercise library, sets config, drag-and-drop, program listing |
-| US 1.5 – Select Training Plan & Auto-Generate Weekly Schedule | Shiah | 2 days | Not Started | Plan selection and 7-day schedule generation pending |
-| US 1.6 Profile-Based Recommendations | Ege | 2d | Done | Derived list from profile |
+| US 1.1 – Register & Log In | Ege, Weiqin | 2 days | Completed | Full authentication system with password validation and session-based login |
+| US 1.2 – Create Fitness Profile | Arshia, Raha | 2 days | Completed | Profile auto-created on signup, finished by user, editable via modal |
+| US 1.3 – Create Programs | Ege, Weiqin | 3 days | Completed | Program creation (Mon–Sun structure), exercise library, sets config, drag-and-drop |
+| US 1.4 – View List of Workouts | Ege | 2 days | Completed | Access list of default workouts or ones created by you |
+| US 1.5 – Browse Trainer Created Programs | Shiah | 1 day | Completed | Browse all programs created by you or other trainers and choose which one to use |
+| US 1.6 - Profile-Based Recommendations | Ege | 1 day | Completed | Matching workout programs with the same focus as user's preferred focus |
 | US 3.1 – Record Workout Completion | Raha | 3 days | Partially Implemented | WorkoutSession model created; UI integration pending |
 | US 3.6 – Personalized Calendar Schedule View | Shiah | 3 days | Partially Implemented | Weekly calendar UI planned; dynamic schedule generation pending |
 
 
-## 5.2 Development Tasks (Recommended Breakdown)
-For each story, list key dev tasks so the TA can see real engineering work.
+## 5.2 Development Tasks
+For each story, we list the key tasks so the TA can see real work.
 
 ### US 1.1 — Register & Log In
-- UI: login/register pages, error messaging, navigation (Est: __h, Actual: __h)
-- Backend/service: auth endpoints or handlers (Est: __h, Actual: __h)
-- Stub data integration (Est: __h, Actual: __h)
-- Unit tests: validation + auth logic (Est: __h, Actual: __h)
+- UI: login/register pages, error messaging, navigation (Est: 6h, Actual: 4h)
+- Backend/service: auth endpoints or handlers (Est: 4h, Actual: 2h)
+- Stub data integration (Est: 1h, Actual: 1h)
+- Unit tests: validation + auth logic (Est: 1h, Actual: 2h)
 
 ### US 1.2 — Create Fitness Profile
-- UI: profile form + validation (Est: __h, Actual: __h)
-- Domain model: profile entity + rules (Est: __h, Actual: __h)
-- Stub repository: save/load profile (Est: __h, Actual: __h)
-- Unit tests: validation + persistence behavior (Est: __h, Actual: __h)
+- UI: profile form + validation (Est: 5h, Actual: 6h)
+- Domain model: profile entity + rules (Est: 2h, Actual: 3h)
+- Stub repository: save/load profile (Est: 2h, Actual: 2h)
+- Unit tests: validation + persistence behavior (Est: 1h, Actual: 1h)
 
 ### US 1.3 — Create Programs from Workouts (Trainer)
-- UI: program builder, section type/format, add exercises (Est: __h, Actual: __h)
-- Domain model: Program, Section, ExerciseEntry (Est: __h, Actual: __h)
-- Stub repository: seed workouts + programs (Est: __h, Actual: __h)
-- Unit tests: program constraints (min 1 exercise, etc.) (Est: __h, Actual: __h)
+- UI: program builder, section type/format, add exercises (Est: 6h, Actual: 8h)
+- Domain model: Program, Section, ExerciseEntry (Est: 4h, Actual: 6h)
+- Stub repository: seed workouts + programs (Est: 3h, Actual: 2h)
+- Unit tests: program constraints (min 1 exercise, etc.) (Est: 1h, Actual: 2h)
 
 ### US 1.4 — View List of Workouts
-- UI: workout catalog + filters + details (Est: __h, Actual: __h)
-- Data: seeded workouts in stub DB (Est: __h, Actual: __h)
-- Unit tests: filtering/sorting logic (Est: __h, Actual: __h)
+- UI: workout catalog + filters + details (Est: 3h, Actual: 4h)
+- Data: seeded workouts in stub DB (Est: 1h, Actual: 1h)
+- Unit tests: filtering/sorting logic (Est: 1h, Actual: 1h)
 
 ### US 1.5 — Browse Trainer Programs
-- UI: browse programs screen + program details (Est: __h, Actual: __h)
-- Data: seeded trainer programs + subscription labeling (Est: __h, Actual: __h)
-- Unit tests: mapping/display logic (Est: __h, Actual: __h)
+- UI: browse programs screen + program details (Est: 5h, Actual: 5h)
+- Data: seeded trainer programs + subscription(?) labeling (Est: 2h, Actual: 1h)
+- Unit tests: mapping/display logic (Est: 1h, Actual: 1h)
 
 ### US 1.6 — Profile-Based Recommendations
-- Logic: recommendation rules (based on focus, level, location) (Est: __h, Actual: __h)
-- UI: recommended list + plan preview (Est: __h, Actual: __h)
-- Unit tests: rule coverage with multiple profiles (Est: __h, Actual: __h)
+- Logic: recommendation rules (based on focus, level, location) (Est: 2h, Actual: 1h)
+- UI: recommended list + plan preview (Est: 2h, Actual: 3h)
+- Unit tests: rule coverage with multiple profiles (Est: 1h, Actual: 2h)
 
 ### US 3.1 — Record Workout Completion
-- UI: daily workout view + completion action (Est: __h, Actual: __h)
-- Domain/service: record completion + basic details (Est: __h, Actual: __h)
-- Unit tests: completion record correctness (Est: __h, Actual: __h)
+- UI: daily workout view + completion action (Est: 5h, Actual: TBD)
+- Domain/service: record completion + basic details (Est: 6h, Actual: TBD)
+- Unit tests: completion record correctness (Est: 2h, Actual: TBD)
 
 ### US 3.6 — Personalized Schedule (Calendar View)
-- UI: weekly calendar layout + click to view workout details (Est: __h, Actual: __h)
-- Logic: generate events from schedule/program selection (Est: __h, Actual: __h)
-- Unit tests: schedule generation mapping (Est: __h, Actual: __h)
+- UI: weekly calendar layout + click to view workout details (Est: 8h, Actual: TBD)
+- Logic: generate events from schedule/program selection (Est: 4h, Actual: TBD)
+- Unit tests: schedule generation mapping (Est: 3h, Actual: TBD)
 
 ---
 
@@ -309,7 +309,7 @@ For each story, list key dev tasks so the TA can see real engineering work.
   - Schedule generation and completion tracking
 - Result: All tests passing on latest ITR1 tag.
 
-*(Add commands to run tests locally, e.g., `npm test`, `pytest`, etc.)*
+*(to run tests locally: `docker-compose exec backend python manage.py test api`)*
 
 ---
 
@@ -317,23 +317,16 @@ For each story, list key dev tasks so the TA can see real engineering work.
 - Commit strategy: frequent commits across team members; avoided last-minute “mega commits”.
 - Tag: `ITR1` created on a commit **before** Feb 13, 2026 11:59 PM.
 - Repo contains:
-  - `src/` source code
-  - `test/` unit tests
-  - `lib/` dependencies (if applicable)
-  - `log.md` (this file)
-  - planning documents (ITR0 + revised ITR1)
-  - wiki + architecture sketch references
+  - `frontend/` frontend container
+  - `frontend/src` frontend source code
+  - `backend/` backend container
+  - `backend/api` backend source code
+  - `docs/` planning documents (ITR0 + ITR1 (log.md, etc.)
+  - `Github Wiki` wiki + architecture sketch references
 
 ---
 
-# 8. Risks / Issues / Concerns
-- (Example) Any blockers (Docker setup, merge conflicts, scope constraints)
-- (Example) Scope tradeoffs made to finish ITR1 on time
-- (Optional) Any team process concerns (if applicable)
-
----
-
-# 9. Next Steps (Preview for ITR2)
+# 8. Next Steps (Preview for ITR2)
 - Identify ITR2 stories (assigned in Meeting 10)
 - Plan improvements:
   - Expand tests and UI polish
