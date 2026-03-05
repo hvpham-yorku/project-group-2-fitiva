@@ -69,6 +69,6 @@ urlpatterns = [
     path('sessions/start/<str:date_str>/', views.start_workout_session),
     path('sessions/complete/<str:date_str>/', views.complete_workout_session),
     path('sessions/history/', views.workout_history),
-    
+    path('sessions/feedback/<str:date_str>/', views.workout_feedback),
 ]
 
