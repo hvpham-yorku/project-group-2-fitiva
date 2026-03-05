@@ -1023,6 +1023,31 @@ def get_workout_for_date(request, date_str):
         'session_status': session_status
     }, status=status.HTTP_200_OK)
 
+@api_view(['GET'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def workout_history(request):
+    start = request.GET.get("start") 
+    end = request.GET.get("end")    
+
+    qs = WorkoutSession.objects.filter(
+        user=request.user,
+        is_completed=True
+    )
+    if start:
+        qs = qs.filter(date__gte=start)
+    if end:
+        qs = qs.filter(date__lte=end)
+
+    qs = qs.order_by("-date")
+
+    serializer = WorkoutSessionSerializer(qs, many=True)
+
+    return Response({
+        "total": qs.count(),
+        "sessions": serializer.data
+    }, status=status.HTTP_200_OK)
+
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1057,7 +1082,7 @@ def start_workout_session(request, date_str):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def complete_workout_session(request, date_str):
-    """Mark today's session completed."""
+    """Mark a session completed. If duration not provided, default to plan.session_length from schedule."""
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
@@ -1069,20 +1094,49 @@ def complete_workout_session(request, date_str):
         defaults={"status": "in_progress", "is_completed": False}
     )
 
-    duration_minutes = request.data.get("duration_minutes")
-    notes = request.data.get("notes", "")
-
+    # Mark completed
     session.status = "completed"
     session.is_completed = True
 
+    notes = request.data.get("notes", "")
+    if notes is not None:
+        session.notes = notes
+
+    # 1) If frontend sent duration_minutes, use it
+    duration_minutes = request.data.get("duration_minutes", None)
     if duration_minutes is not None:
         try:
             session.duration_minutes = int(duration_minutes)
-        except ValueError:
+        except (ValueError, TypeError):
             return Response({"error": "duration_minutes must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        # 2) Otherwise default from the scheduled plan's session_length
+        try:
+            schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+            day_name = target_date.strftime('%A').lower()  # monday, tuesday, ...
+            section_ids = schedule.weekly_schedule.get(day_name, [])
 
-    if notes is not None:
-        session.notes = notes
+            # normalize to list
+            if not isinstance(section_ids, list):
+                section_ids = [section_ids] if section_ids != 'rest' else []
+
+            # pick first scheduled section as the "plan" for the day
+            if section_ids:
+                section = ProgramSection.objects.select_related("program").get(id=section_ids[0])
+
+                # link session to plan (nice to have)
+                session.plan = section.program
+
+                # set duration from plan if missing
+                if session.duration_minutes in (None, 0):
+                    session.duration_minutes = section.program.session_length
+
+                # store plan_name for convenience (optional)
+                # (only if your serializer exposes it; otherwise ignore)
+        except UserSchedule.DoesNotExist:
+            pass
+        except ProgramSection.DoesNotExist:
+            pass
 
     session.save()
 
@@ -1093,6 +1147,7 @@ def complete_workout_session(request, date_str):
         "is_completed": session.is_completed,
         "duration_minutes": session.duration_minutes,
         "notes": session.notes,
+        "plan": session.plan.name if session.plan else None,
     }, status=status.HTTP_200_OK)
 
 @api_view(['DELETE'])

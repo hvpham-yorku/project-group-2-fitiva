@@ -223,6 +223,8 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--border-medium);
   transition: background-color 0.3s ease, border-color 0.3s ease;
+
+  margin-top: 2rem;
 }
 
 .section-title {
@@ -274,6 +276,9 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   transition: color 0.3s ease;
+
+  margin-top: 0.25rem;
+  flex: 1;
 }
 
 /* Loading Spinner */
@@ -481,4 +486,30 @@
 
 .action-button.schedule-highlight .action-button-icon {
   font-size: 1.75rem;
+}
+
+.action-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+
+  /* ADD THIS */
+  align-items: stretch;
+}
+
+.action-button {
+  padding: 1rem;
+  border: 2px solid var(--border-medium);
+  border-radius: 0.5rem;
+  background-color: var(--bg-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: block;
+
+  /* ADD THESE */
+  min-height: 120px;          /* adjust 120/130/140 until it looks right */
+  display: flex;
+  flex-direction: column;
 }
