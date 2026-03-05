@@ -1,6 +1,7 @@
 # Fitiva - Workout Training Planner
 
 Fitiva is a web application for personalized workout planning, serving both fitness enthusiasts and trainers.
+Note for TAs: Please check docs/ folder for log.md and other files for the deliverable marking
 
 ## Team
 
