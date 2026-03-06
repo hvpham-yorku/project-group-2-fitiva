@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { profileAPI } from '@/library/api';
+import { profileAPI, sessionAPI } from '@/library/api';
 import Logo from '@/components/ui/Logo';
 import SettingsModal from '@/components/ui/SettingsModal';
 import './dashboard.css';
@@ -92,7 +92,8 @@ export default function DashboardPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+  const [openStatDetail, setOpenStatDetail] = useState<null | 'time' | 'workouts' | 'streak'>(null);
+
   // Profile state
   const [hasCompletedProfile, setHasCompletedProfile] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -121,34 +122,29 @@ const buildMonSunWeekData = (sessions: WorkoutHistorySession[]) => {
     ? new Date(sessions.map(s => s.date).sort().slice(-1)[0] + "T12:00:00")
     : new Date();
 
-  // Find Monday of anchor week (local time)
-  const day = anchor.getDay(); // Sun=0..Sat=6
+  const day = anchor.getDay();
   const diffToMonday = (day + 6) % 7;
 
   const monday = new Date(anchor);
   monday.setHours(0, 0, 0, 0);
   monday.setDate(anchor.getDate() - diffToMonday);
 
-  // Sum minutes by date (dates are already YYYY-MM-DD from backend)
   const minutesByDate = new Map<string, number>();
   for (const s of sessions) {
     const m = typeof s.duration_minutes === 'number' ? s.duration_minutes : 0;
     minutesByDate.set(s.date, (minutesByDate.get(s.date) ?? 0) + m);
   }
 
-  // Build Mon..Sun
   const week = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const iso = toLocalISODate(d);
 
-    const mins = minutesByDate.get(iso) ?? 0;
-    const hours = Math.round((mins) * 10) / 10;
-    week.push({ day: labels[i], hours, iso }); // include iso for debugging
+    const minutes = minutesByDate.get(iso) ?? 0;
+    week.push({ day: labels[i], minutes, iso });
   }
 
-  console.log("WEEKLY DATA:", week); // ✅ temporary debug
   return week;
 };
 
@@ -220,29 +216,18 @@ useEffect(() => {
   fetchTrainerStats();
 }, [user?.id, user?.is_trainer]);
 
-// Fetch member workout history (completed sessions)
 useEffect(() => {
   const fetchHistory = async () => {
-    if (!user || user.is_trainer) {
+    if (!user) {
       setHistoryLoading(false);
       return;
     }
 
+    setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions/history/`, {
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        setHistorySessions([]);
-        return;
-      }
-
-      const data = await res.json();
-      // backend returns { total, sessions }
+      const data = await sessionAPI.getWorkoutHistory() as { total?: number; sessions?: WorkoutHistorySession[] };
       setHistorySessions(Array.isArray(data.sessions) ? data.sessions : []);
-    } catch (e) {
-      console.error('Error fetching workout history:', e);
+    } catch {
       setHistorySessions([]);
     } finally {
       setHistoryLoading(false);
@@ -250,6 +235,12 @@ useEffect(() => {
   };
 
   fetchHistory();
+
+  const onFocus = () => {
+    if (user) fetchHistory();
+  };
+  window.addEventListener('focus', onFocus);
+  return () => window.removeEventListener('focus', onFocus);
 }, [user]);
 
   // Close dropdown when clicking outside
@@ -308,7 +299,59 @@ useEffect(() => {
   const initials = `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase() 
     || user.username[0].toUpperCase();
 
-  // Dynamic trainer stats with live program countt
+  const totalWorkouts = historySessions.length;
+
+  const totalMinutes = historySessions.reduce((sum, s) => {
+    const m = typeof s.duration_minutes === 'number' ? s.duration_minutes : 0;
+    return sum + m;
+  }, 0);
+
+  const toLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const getStreakInfo = (sessions: WorkoutHistorySession[]) => {
+    const result = { count: 0, dates: [] as string[] };
+    if (!sessions.length) return result;
+
+    const dates = Array.from(new Set(sessions.map(s => s.date))).sort().reverse();
+
+    const today = new Date();
+    const todayLocal = toLocalDateString(today);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayLocal = toLocalDateString(yesterday);
+
+    let current: Date | null =
+      dates[0] === todayLocal ? today : (dates[0] === yesterdayLocal ? yesterday : null);
+    if (!current) return result;
+
+    for (const d of dates) {
+      if (!current) break;
+
+      const currentLocal = toLocalDateString(current);
+
+      if (d === currentLocal) {
+        result.count++;
+        result.dates.push(d);
+
+        const prev: Date = new Date(current);
+        prev.setDate(current.getDate() - 1);
+
+        current = prev;
+      } else {
+        break;
+      }
+    }
+    return result;
+  };
+
+  const streakInfo = getStreakInfo(historySessions);
+  const currentStreak = streakInfo.count;
+
   const TRAINER_STATS: StatCard[] = [
     {
       icon: '📊',
@@ -338,55 +381,28 @@ useEffect(() => {
       value: 0,
       subtext: 'See how many people follow your workouts!',
     },
+    {
+      icon: '📊',
+      iconColor: 'blue',
+      label: 'Total Workouts',
+      value: historyLoading ? '...' : totalWorkouts,
+      subtext: totalWorkouts === 0 ? 'Start your first workout today!' : 'Nice work—keep going!',
+    },
+    {
+      icon: '🔥',
+      iconColor: 'green',
+      label: 'Current Streak',
+      value: historyLoading ? '...' : `${currentStreak} days`,
+      subtext: currentStreak === 0 ? 'Build consistency!' : 'Momentum looks good!',
+    },
+    {
+      icon: '⏱️',
+      iconColor: 'purple',
+      label: 'Total Time',
+      value: historyLoading ? '...' : `${totalMinutes} min`,
+      subtext: 'Every minute counts',
+    },
   ];
-
-    // Compute member stats from history
-  const totalWorkouts = historySessions.length;
-
-  const totalMinutes = historySessions.reduce((sum, s) => {
-    const m = typeof s.duration_minutes === 'number' ? s.duration_minutes : 0;
-    return sum + m;
-  }, 0);
-
-  // Simple streak: consecutive days including today OR yesterday
-  const computeStreak = (sessions: WorkoutHistorySession[]) => {
-    if (!sessions.length) return 0;
-
-    const dates = Array.from(new Set(sessions.map(s => s.date))).sort().reverse();
-
-    const today = new Date();
-    const toISO = (d: Date) => d.toISOString().slice(0, 10);
-
-    const todayISO = toISO(today);
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const yesterdayISO = toISO(yesterday);
-
-    let current: Date | null =
-      dates[0] === todayISO ? today : (dates[0] === yesterdayISO ? yesterday : null);
-    if (!current) return 0;
-
-    let streak = 0;
-    for (const d of dates) {
-      if (!current) break;
-
-      const currentISO = toISO(current);
-
-      if (d === currentISO) {
-        streak++;
-
-        const prev: Date = new Date(current);
-        prev.setDate(current.getDate() - 1);
-
-        current = prev;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  };
-
-  const currentStreak = computeStreak(historySessions);
 
   const MEMBER_STATS: StatCard[] = [
     {
@@ -531,33 +547,168 @@ useEffect(() => {
           </div>
         </section>
 
-        {/* Stats Grid */}
         <section className="stats-grid">
-          {stats.map((stat) => (
-            <div key={stat.label} className="stat-card">
-              <div className={`stat-icon ${stat.iconColor}`}>{stat.icon}</div>
-              <div className="stat-label">{stat.label}</div>
-              <div className="stat-value">{stat.value}</div>
-              <div className="stat-subtext">{stat.subtext}</div>
-            </div>
-          ))}
+          {stats.map((stat) => {
+            const detailKey = stat.label === 'Total Time' ? 'time' : stat.label === 'Total Workouts' ? 'workouts' : stat.label === 'Current Streak' ? 'streak' : null;
+            const isClickable = detailKey !== null;
+            const cardContent = (
+              <>
+                <div className={`stat-icon ${stat.iconColor}`}>{stat.icon}</div>
+                <div className="stat-label">{stat.label}</div>
+                <div className="stat-value">{stat.value}</div>
+                <div className="stat-subtext">{stat.subtext}</div>
+              </>
+            );
+            return isClickable && detailKey ? (
+              <button
+                key={stat.label}
+                type="button"
+                className="stat-card stat-card-clickable"
+                onClick={() => setOpenStatDetail(detailKey)}
+                aria-label={`View ${stat.label} details`}
+              >
+                {cardContent}
+              </button>
+            ) : (
+              <div key={stat.label} className="stat-card">
+                {cardContent}
+              </div>
+            );
+          })}
         </section>
-        {/* Weekly Workout Graph (Members only) */}
-{!user.is_trainer && (
-  <section style={{ marginTop: '24px' }}>
-    <h2 className="section-title">This Week</h2>
 
-    <div
-      style={{
-        background: '#fff',
-        border: '1px solid #e8e8e8',
-        borderRadius: '12px',
-        padding: '16px',
-        height: '260px',
-      }}
-    >
+        {openStatDetail && (
+          <div
+            className="time-breakdown-overlay"
+            onClick={() => setOpenStatDetail(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stat-detail-title"
+          >
+            <div className="time-breakdown-content" onClick={(e) => e.stopPropagation()}>
+              <div className="time-breakdown-header">
+                <h2 id="stat-detail-title" className="time-breakdown-title">
+                  {openStatDetail === 'time' && 'Total Time'}
+                  {openStatDetail === 'workouts' && 'Total Workouts'}
+                  {openStatDetail === 'streak' && 'Current Streak'}
+                </h2>
+                <button
+                  type="button"
+                  className="time-breakdown-close"
+                  onClick={() => setOpenStatDetail(null)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="time-breakdown-body">
+                {openStatDetail === 'time' && (
+                  historySessions.length === 0 ? (
+                    <div className="time-breakdown-empty">
+                      <p className="time-breakdown-empty-text">No completed workouts yet.</p>
+                      <p className="time-breakdown-empty-sub">Complete workouts from your schedule to see your time breakdown here.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="time-breakdown-total">
+                        Total: {totalMinutes} min
+                      </div>
+                      <ul className="time-breakdown-list">
+                        {historySessions.map((s) => (
+                          <li key={s.id} className="time-breakdown-row">
+                            <span className="time-breakdown-date">
+                              {new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </span>
+                            <span className="time-breakdown-plan">{s.plan_name || 'Workout'}</span>
+                            <span className="time-breakdown-duration">
+                              {typeof s.duration_minutes === 'number' ? `${s.duration_minutes} min` : '—'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )
+                )}
+                {openStatDetail === 'workouts' && (
+                  historySessions.length === 0 ? (
+                    <div className="time-breakdown-empty">
+                      <p className="time-breakdown-empty-text">No completed workouts yet.</p>
+                      <p className="time-breakdown-empty-sub">Complete workouts from your schedule to see them here.</p>
+                    </div>
+                  ) : (
+                    <ul className="time-breakdown-list">
+                      {historySessions.map((s) => (
+                        <li key={s.id} className="time-breakdown-row">
+                          <span className="time-breakdown-date">
+                            {new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </span>
+                          <span className="time-breakdown-plan">{s.plan_name || 'Workout'}</span>
+                          <span className="time-breakdown-duration">
+                            {typeof s.duration_minutes === 'number' ? `${s.duration_minutes} min` : '—'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                )}
+                {openStatDetail === 'streak' && (
+                  <>
+                    <div className="time-breakdown-total">
+                      {currentStreak} {currentStreak === 1 ? 'day' : 'days'}
+                    </div>
+                    <p className="time-breakdown-streak-explanation">
+                      Current streak is the number of consecutive days you worked out, including today or yesterday. If your most recent workout was more than one day ago, the streak resets to zero.
+                    </p>
+                    {currentStreak === 0 ? (
+                      <div className="time-breakdown-empty">
+                        <p className="time-breakdown-empty-text">No active streak</p>
+                        <p className="time-breakdown-empty-sub">Let&apos;s build a streak together—work out today!</p>
+                      </div>
+                    ) : (
+                      <ul className="time-breakdown-list">
+                        {streakInfo.dates.map((dateStr) => (
+                          <li key={dateStr} className="time-breakdown-row time-breakdown-row-single">
+                            <span className="time-breakdown-date">
+                              {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {!user.is_trainer && (
+  <section className="dashboard-trends-section">
+    <h2 className="section-title">Weekly Activity</h2>
+
+    <div className="dashboard-chart-card">
       {historyLoading ? (
-        <p>Loading chart...</p>
+        <p className="dashboard-chart-loading">Loading...</p>
+      ) : historySessions.length === 0 ? (
+        <div className="dashboard-chart-empty">
+          <p className="dashboard-chart-empty-title">No completed workouts yet</p>
+          <p className="dashboard-chart-empty-text">Complete a workout from your schedule to see your activity here.</p>
+          <Link href="/schedule" className="dashboard-chart-empty-link">Go to Schedule</Link>
+        </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={weeklyChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
@@ -567,10 +718,10 @@ useEffect(() => {
               label={{ value: "Minutes", angle: -90, position: "insideLeft" }}
               domain={[0, 'auto']}
             />
-            <Tooltip />
+            <Tooltip formatter={(value: number | undefined) => [value ?? 0, 'Minutes']} />
             <Line
               type="monotone"
-              dataKey="hours"
+              dataKey="minutes"
               strokeWidth={3}
               dot={{ r: 5 }}
             />

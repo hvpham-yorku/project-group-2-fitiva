@@ -17,7 +17,6 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from datetime import datetime
 from django.utils import timezone
 
 
@@ -55,6 +54,8 @@ from .serializers import (
 
 User = get_user_model()
 
+DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -74,6 +75,126 @@ def format_validation_errors(validation_error):
     return formatted_errors
 
 
+def _is_workout_day(slot):
+    """Return True if a weekly_schedule slot represents a workout (non-empty list)."""
+    if isinstance(slot, list):
+        return len(slot) > 0
+    if isinstance(slot, str):
+        return slot not in ('rest', '', None)
+    return False
+
+
+def _find_next_workout_day(weekly_schedule, pain_day):
+    """
+    BUG FIX: Was previously using a hardcoded +2 day offset which always
+    produced Monday→Wednesday, Tuesday→Thursday regardless of the actual
+    schedule. This version walks forward day by day from the pain day and
+    returns the first day that actually has workout sections assigned.
+
+    Returns (day_name, iso_date_str) or (None, None) if no workout days exist.
+    """
+    pain_day = pain_day.lower()
+    if pain_day not in DAYS_OF_WEEK:
+        return None, None
+
+    pain_idx = DAYS_OF_WEEK.index(pain_day)
+    today = datetime.now().date()
+
+    for offset in range(1, 8):
+        candidate_day = DAYS_OF_WEEK[(pain_idx + offset) % 7]
+        slot = weekly_schedule.get(candidate_day)
+        if _is_workout_day(slot):
+            # Compute the ISO date for the next occurrence of candidate_day
+            candidate_weekday = DAYS_OF_WEEK.index(candidate_day)  # 0=monday
+            # today.weekday() is also 0=monday, matching our list
+            days_until = (candidate_weekday - today.weekday()) % 7
+            if days_until == 0:
+                days_until = 7  # next occurrence, not today
+            next_date = today + timedelta(days=days_until)
+            return candidate_day, next_date.isoformat()
+
+    return None, None
+
+
+def _build_recovery_options(pain_day, next_workout_day, next_workout_date, current_duration=45):
+    """
+    Build the list of recovery option dicts shown to the user in the pain modal.
+    The frontend mirrors this structure in buildRecoveryOptions().
+    """
+    next_label  = next_workout_day.capitalize() if next_workout_day else 'next workout day'
+    pain_label  = pain_day.capitalize()         if pain_day         else 'today'
+    shorter_mins = max(20, round(current_duration * 0.6))
+
+    options = []
+
+    if next_workout_day:
+        options += [
+            {
+                "id": "rest_next",
+                "label": f"Rest on {next_label}",
+                "description": (
+                    f"Skip {next_label}'s workout entirely and give your body "
+                    f"a full recovery day."
+                ),
+                "icon": "😴",
+                "affected_day": next_workout_day,
+                "affected_date": next_workout_date,
+                "change_type": "rest",
+            },
+            {
+                "id": "shorter_workout",
+                "label": f"Shorter workout on {next_label} ({shorter_mins} min)",
+                "description": (
+                    f"Do a lighter {shorter_mins}-minute session instead of the full "
+                    f"workout to stay active without overloading."
+                ),
+                "icon": "⏱️",
+                "affected_day": next_workout_day,
+                "affected_date": next_workout_date,
+                "change_type": "shorter",
+                "duration_minutes": shorter_mins,
+            },
+            {
+                "id": "lighter_focus",
+                "label": f"Swap to mobility/stretching on {next_label}",
+                "description": (
+                    f"Replace {next_label}'s workout with gentle mobility or "
+                    f"stretching to keep moving without aggravating the pain."
+                ),
+                "icon": "🧘",
+                "affected_day": next_workout_day,
+                "affected_date": next_workout_date,
+                "change_type": "lighter",
+            },
+        ]
+
+    options += [
+        {
+            "id": "rest_same_day",
+            "label": f"Also rest today ({pain_label})",
+            "description": "Mark today as a rest day too and resume when you feel ready.",
+            "icon": "🛌",
+            "affected_day": pain_day,
+            "affected_date": None,
+            "change_type": "rest",
+        },
+        {
+            "id": "keep_going",
+            "label": "Keep my schedule as-is",
+            "description": (
+                "Acknowledge the pain but continue with the planned schedule. "
+                "Monitor how you feel."
+            ),
+            "icon": "💪",
+            "affected_day": None,
+            "affected_date": None,
+            "change_type": "none",
+        },
+    ]
+
+    return options
+
+
 # ============================================================================
 # AUTHENTICATION VIEWS
 # ============================================================================
@@ -81,7 +202,6 @@ def format_validation_errors(validation_error):
 @ensure_csrf_cookie
 @require_GET
 def csrf(request):
-    """Return CSRF token for client-side authentication."""
     token = get_token(request)
     return JsonResponse({"csrfToken": token})
 
@@ -90,51 +210,33 @@ def csrf(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def signup_view(request):
-    """Register a new user with optional trainer profile."""
     serializer = UserSignupSerializer(data=request.data)
-    
     try:
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(
-            UserSerializer(user).data,
-            status=status.HTTP_201_CREATED
-        )
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
     except ValidationError as e:
-        return Response(
-            {'errors': format_validation_errors(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({'errors': format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def login_view(request):
-    """Authenticate user and create session."""
     serializer = UserLoginSerializer(data=request.data)
-    
     try:
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        
         login(request, user)
-        return Response({
-            "ok": True,
-            "user": UserSerializer(user).data
-        })
+        return Response({"ok": True, "user": UserSerializer(user).data})
     except ValidationError as e:
         error_message = str(e.detail[0]) if isinstance(e.detail, list) else str(e.detail)
-        return Response(
-            {"detail": error_message},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
+        return Response({"detail": error_message}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
-    """Log out current user and end session."""
     logout(request)
     return Response({"ok": True})
 
@@ -143,11 +245,7 @@ def logout_view(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def me(request):
-    """Return current authenticated user's data."""
-    return Response({
-        "authenticated": True,
-        "user": UserSerializer(request.user).data
-    })
+    return Response({"authenticated": True, "user": UserSerializer(request.user).data})
 
 
 # ============================================================================
@@ -157,17 +255,13 @@ def me(request):
 @api_view(["POST"])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
-
 def create_profile_view(request):
-    """Create fitness profile for current user."""
     if UserProfile.objects.filter(user=request.user).exists():
         return Response(
-            {"detail": "Profile already exists. Use update endpoint instead."}, 
-            status=status.HTTP_400_BAD_REQUEST
+            {"detail": "Profile already exists. Use update endpoint instead."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-    
     serializer = UserProfileSerializer(data=request.data)
-    
     try:
         serializer.is_valid(raise_exception=True)
         profile = UserProfile.objects.create(
@@ -177,51 +271,27 @@ def create_profile_view(request):
             training_location=serializer.validated_data.get("training_location"),
             fitness_focus=serializer.validated_data.get("fitness_focus"),
         )
-        
-        return Response(
-            UserProfileSerializer(profile).data,
-            status=status.HTTP_201_CREATED
-        )
+        return Response(UserProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
     except ValidationError as e:
-        return Response(
-            {"errors": format_validation_errors(e)}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET", "PUT"])
 @permission_classes([IsAuthenticated])
 def profile_me_view(request):
-    """Get or update current user's fitness profile."""
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
-        return Response(
-            {"detail": "Profile not found"}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
+        return Response({"detail": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "GET":
-        return Response(
-            UserProfileSerializer(profile).data, 
-            status=status.HTTP_200_OK
-        )
-    
-    # PUT - Update profile
+        return Response(UserProfileSerializer(profile).data, status=status.HTTP_200_OK)
     serializer = UserProfileSerializer(profile, data=request.data, partial=True)
-    
     try:
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(
-            UserProfileSerializer(profile).data,
-            status=status.HTTP_200_OK
-        )
+        return Response(UserProfileSerializer(profile).data, status=status.HTTP_200_OK)
     except ValidationError as e:
-        return Response(
-            {"errors": format_validation_errors(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ============================================================================
@@ -231,22 +301,11 @@ def profile_me_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_public_profile(request, user_id):
-    """
-    Get public profile for any user.
-    Returns basic info + trainer profile if they're a trainer.
-    """
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
-        return Response(
-            {"detail": "User not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    # Check if viewing own profile
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     is_owner = request.user.id == user.id
-    
-    # Get user profile
     user_profile = None
     try:
         profile = user.profile
@@ -258,56 +317,46 @@ def get_public_profile(request, user_id):
         }
     except UserProfile.DoesNotExist:
         pass
-    
-    # Get trainer profile if user is a trainer
     trainer_profile = None
     if user.is_trainer:
         try:
             trainer_profile = TrainerProfileSerializer(user.trainer_profile).data
         except TrainerProfile.DoesNotExist:
             pass
-    
-    return Response({
-        "id": user.id,
-        "username": user.username,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "email": user.email if is_owner else None,  # Only show email to owner
-        "is_trainer": user.is_trainer,
-        "is_owner": is_owner,
-        "user_profile": user_profile,
-        "trainer_profile": trainer_profile,
-    }, status=status.HTTP_200_OK)
+    return Response(
+        {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email if is_owner else None,
+            "is_trainer": user.is_trainer,
+            "is_owner": is_owner,
+            "user_profile": user_profile,
+            "trainer_profile": trainer_profile,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_trainer_programs(request, user_id):
-    """Get all workout programs created by a specific trainer."""
     try:
         user = User.objects.get(id=user_id, is_trainer=True)
     except User.DoesNotExist:
-        return Response(
-            {"detail": "Trainer not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    # Check if we should include deleted programs (for stats)
+        return Response({"detail": "Trainer not found"}, status=status.HTTP_404_NOT_FOUND)
     include_deleted = request.GET.get('include_deleted', 'false').lower() == 'true'
-    
-    if include_deleted:
-        # For stats: return all programs including deleted
-        programs = WorkoutPlan.objects.filter(trainer=user).order_by('-created_at')
-    else:
-        # For display: return only non-deleted programs
-        programs = WorkoutPlan.objects.filter(trainer=user, is_deleted=False).order_by('-created_at')
-    
+    programs = (
+        WorkoutPlan.objects.filter(trainer=user).order_by('-created_at')
+        if include_deleted
+        else WorkoutPlan.objects.filter(trainer=user, is_deleted=False).order_by('-created_at')
+    )
     serializer = WorkoutPlanSerializer(programs, many=True)
-    
-    return Response({
-        "programs": serializer.data,
-        "total_count": programs.count()
-    }, status=status.HTTP_200_OK)
+    return Response(
+        {"programs": serializer.data, "total_count": programs.count()},
+        status=status.HTTP_200_OK,
+    )
 
 
 # ============================================================================
@@ -317,36 +366,22 @@ def get_trainer_programs(request, user_id):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_trainer_profile(request):
-    """Update trainer profile (trainers only)."""
     if not request.user.is_trainer:
         return Response(
             {"detail": "Only trainers can update trainer profiles"},
-            status=status.HTTP_403_FORBIDDEN
+            status=status.HTTP_403_FORBIDDEN,
         )
-    
     try:
         trainer_profile = request.user.trainer_profile
     except TrainerProfile.DoesNotExist:
-        return Response(
-            {"detail": "Trainer profile not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    serializer = TrainerProfileSerializer(
-        trainer_profile, 
-        data=request.data, 
-        partial=True
-    )
-    
+        return Response({"detail": "Trainer profile not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = TrainerProfileSerializer(trainer_profile, data=request.data, partial=True)
     try:
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     except ValidationError as e:
-        return Response(
-            {"errors": format_validation_errors(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ============================================================================
@@ -354,251 +389,148 @@ def update_trainer_profile(request):
 # ============================================================================
 
 class WorkoutProgramViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing workout plans/programs."""
     serializer_class = WorkoutPlanSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Return all non-deleted workout programs ordered by creation date."""
         return WorkoutPlan.objects.filter(is_deleted=False).select_related('trainer').order_by('-created_at')
 
     def perform_create(self, serializer):
-        """Set the trainer to the current user when creating a new plan."""
-        # Check if user is a trainer
         if not self.request.user.is_trainer:
             raise ValidationError({"detail": "Only trainers can create workout programs"})
         serializer.save(trainer=self.request.user)
-    
+
     def update(self, request, *args, **kwargs):
-        """Update a workout program with nested sections, exercises, and sets."""
         instance = self.get_object()
-        
-        # Check permissions
         if not request.user.is_trainer:
             raise ValidationError({"detail": "Only trainers can update workout programs"})
         if instance.trainer != request.user:
             raise ValidationError({"detail": "You can only update your own programs"})
-        
-        # Prevent changing the name
         if 'name' in request.data and request.data['name'] != instance.name:
             raise ValidationError({"detail": "Program name cannot be changed"})
-        
-        # Get the serializer and validate
         serializer = self.get_serializer(instance, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
-        
-        # Call the serializer's custom update method directly
         updated_instance = serializer.update(instance, serializer.validated_data)
-        
-        # Serialize the updated instance for response
-        response_serializer = self.get_serializer(updated_instance)
-        return Response(response_serializer.data)
-
-
+        return Response(self.get_serializer(updated_instance).data)
 
     def perform_destroy(self, instance):
-        """Soft delete: Set is_deleted to True instead of deleting."""
         if not self.request.user.is_trainer:
             raise ValidationError({"detail": "Only trainers can delete workout programs"})
         if instance.trainer != self.request.user:
             raise ValidationError({"detail": "You can only delete your own programs"})
-        
-        # Soft delete
         instance.is_deleted = True
         instance.save()
 
 
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing workout sessions."""
     serializer_class = WorkoutSessionSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
-        """Return user's workout sessions ordered by date."""
         return WorkoutSession.objects.filter(user=self.request.user).order_by('-date')
-    
+
     def perform_create(self, serializer):
-        """Set the user to the current user when creating a session."""
         serializer.save(user=self.request.user)
 
 
 class WorkoutFeedbackViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing workout feedback."""
     serializer_class = WorkoutFeedbackSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
-        """Return feedback for user's workout sessions."""
-        return WorkoutFeedback.objects.filter(
-            session__user=self.request.user
-        ).order_by('-created_at')
+        return WorkoutFeedback.objects.filter(session__user=self.request.user).order_by('-created_at')
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_recommendations(request):
-    """
-    Get workout program recommendations based on user's fitness focuses.
-    Returns programs that share at least one focus with the user's profile.
-    """
     try:
-        # Get user's profile
         user_profile = UserProfile.objects.get(user=request.user)
         user_focuses = user_profile.fitness_focus
-        
-        # Validate user has focuses set
         if not user_focuses or len(user_focuses) == 0:
-            return Response({
-                'message': 'Please set your fitness focuses in your profile to get recommendations',
-                'programs': []
-            }, status=status.HTTP_200_OK)
-        
-        # Get all non-deleted programs
+            return Response(
+                {'message': 'Please set your fitness focuses in your profile to get recommendations', 'programs': []},
+                status=status.HTTP_200_OK,
+            )
         all_programs = WorkoutPlan.objects.filter(is_deleted=False)
-        
-        # Filter programs that have at least one matching focus
-        recommended_programs = []
-        for program in all_programs:
-            program_focuses = program.focus
-            if program_focuses:
-                # Check if there's any overlap between user focuses and program focuses
-                matching_focuses = set(user_focuses) & set(program_focuses)
-                if matching_focuses:
-                    recommended_programs.append(program)
-        
-        # Serialize the programs
+        recommended_programs = [p for p in all_programs if p.focus and set(user_focuses) & set(p.focus)]
         serializer = WorkoutPlanSerializer(recommended_programs, many=True)
-        
-        return Response({
-            'user_focuses': user_focuses,
-            'total_recommendations': len(recommended_programs),
-            'programs': serializer.data
-        }, status=status.HTTP_200_OK)
-        
+        return Response(
+            {'user_focuses': user_focuses, 'total_recommendations': len(recommended_programs), 'programs': serializer.data},
+            status=status.HTTP_200_OK,
+        )
     except UserProfile.DoesNotExist:
-        return Response({
-            'error': 'User profile not found. Please complete your profile setup.'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'User profile not found. Please complete your profile setup.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
     except Exception as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_program_detail(request, program_id):
-    """
-    Get detailed information about a specific workout program.
-    Includes all sections, exercises, and sets.
-    """
     try:
-        # Get the program
         program = WorkoutPlan.objects.get(id=program_id, is_deleted=False)
-        
-        # Serialize with full nested data
-        serializer = WorkoutPlanSerializer(program)
-        
-        return Response(serializer.data, status=status.HTTP_200_OK)
-        
+        return Response(WorkoutPlanSerializer(program).data, status=status.HTTP_200_OK)
     except WorkoutPlan.DoesNotExist:
-        return Response({
-            'error': 'Program not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Program not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        return Response({
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def exercise_templates(request):
-    """
-    GET: List all exercise templates (trainer's own + defaults)
-    POST: Create a new exercise template
-    """
     if not request.user.is_trainer:
-        return Response({
-            'error': 'Only trainers can access exercise templates'
-        }, status=status.HTTP_403_FORBIDDEN)
-    
+        return Response({'error': 'Only trainers can access exercise templates'}, status=status.HTTP_403_FORBIDDEN)
     if request.method == 'GET':
-        # Get trainer's own exercises + default exercises
         templates = ExerciseTemplate.objects.filter(
             Q(trainer=request.user) | Q(is_default=True)
         ).order_by('is_default', '-created_at')
-        
-        # Optional search filter
         search = request.GET.get('search', '').strip()
         if search:
             templates = templates.filter(name__icontains=search)
-        
         serializer = ExerciseTemplateSerializer(templates, many=True)
-        return Response({
-            'total': templates.count(),
-            'exercises': serializer.data
-        }, status=status.HTTP_200_OK)
-    
-    elif request.method == 'POST':
-        serializer = ExerciseTemplateSerializer(data=request.data)
-        if serializer.is_valid():
-            # Set the trainer to current user
-            serializer.save(trainer=request.user, is_default=False)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'total': templates.count(), 'exercises': serializer.data}, status=status.HTTP_200_OK)
+    serializer = ExerciseTemplateSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(trainer=request.user, is_default=False)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def exercise_template_detail(request, template_id):
-    """
-    GET: Retrieve specific exercise template
-    PUT: Update exercise template
-    DELETE: Delete exercise template
-    """
     if not request.user.is_trainer:
-        return Response({
-            'error': 'Only trainers can access exercise templates'
-        }, status=status.HTTP_403_FORBIDDEN)
-    
+        return Response({'error': 'Only trainers can access exercise templates'}, status=status.HTTP_403_FORBIDDEN)
     try:
         template = ExerciseTemplate.objects.get(id=template_id)
-        
-        # Only allow modifying own exercises (not defaults)
         if request.method in ['PUT', 'DELETE']:
             if template.is_default or template.trainer != request.user:
-                return Response({
-                    'error': 'You can only modify your own exercises'
-                }, status=status.HTTP_403_FORBIDDEN)
-        
+                return Response({'error': 'You can only modify your own exercises'}, status=status.HTTP_403_FORBIDDEN)
         if request.method == 'GET':
-            serializer = ExerciseTemplateSerializer(template)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        
+            return Response(ExerciseTemplateSerializer(template).data, status=status.HTTP_200_OK)
         elif request.method == 'PUT':
             serializer = ExerciseTemplateSerializer(template, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
         elif request.method == 'DELETE':
             template.delete()
-            return Response({
-                'message': 'Exercise deleted successfully'
-            }, status=status.HTTP_204_NO_CONTENT)
-    
+            return Response({'message': 'Exercise deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
     except ExerciseTemplate.DoesNotExist:
-        return Response({
-            'error': 'Exercise template not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Exercise template not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
-# PASSWORD RESET VIEWS (To be implemented)
+# PASSWORD RESET VIEWS
 # ============================================================================
 
 def build_reset_url(request, uid, token):
-    """Build password reset URL for email."""
     base = os.environ.get("FRONTEND_BASE_URL")
     query_params = urlencode({"uid": uid, "token": token})
     if base:
@@ -610,23 +542,18 @@ def build_reset_url(request, uid, token):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def password_reset_confirm(request):
-    """Confirm password reset with token and set new password."""
     uid = request.data.get("uid")
     token = request.data.get("token")
     new_password = request.data.get("new_password")
-    
     if not (uid and token and new_password):
         return Response({"detail": "Missing fields"}, status=status.HTTP_400_BAD_REQUEST)
-    
     try:
         uid_int = int(urlsafe_base64_decode(uid).decode())
         user = User.objects.get(pk=uid_int)
     except (ValueError, User.DoesNotExist):
         return Response({"detail": "Invalid UID"}, status=status.HTTP_400_BAD_REQUEST)
-    
     if not default_token_generator.check_token(user, token):
         return Response({"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
-    
     user.set_password(new_password)
     user.save()
     return Response({"ok": True})
@@ -636,14 +563,8 @@ def password_reset_confirm(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([AllowAny])
 def password_reset(request):
-    """
-    Initiate password reset process.
-    TODO: Implement email sending logic.
-    """
-    # Implementation pending
     return Response({"ok": True})
 
-# add schedule views
 
 # ============================================================================
 # SCHEDULE VIEWS
@@ -653,49 +574,24 @@ def password_reset(request):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def generate_schedule(request):
-    """
-    Add a program to the user's schedule (or create new schedule).
-    Merges with existing schedule if one exists.
-    """
     program_id = request.data.get('program_id')
     start_date_str = request.data.get('start_date')
     rest_days = request.data.get('rest_days', [])
-    
     if not program_id:
-        return Response(
-            {"error": "program_id is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+        return Response({"error": "program_id is required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         program = WorkoutPlan.objects.get(id=program_id, is_deleted=False)
     except WorkoutPlan.DoesNotExist:
-        return Response(
-            {"error": "Program not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    # Check if user already has this program in their schedule
+        return Response({"error": "Program not found"}, status=status.HTTP_404_NOT_FOUND)
     try:
         existing_schedule = UserSchedule.objects.get(user=request.user, is_active=True)
         if program in existing_schedule.programs.all():
-            return Response(
-                {"error": "This program is already in your schedule"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "This program is already in your schedule"}, status=status.HTTP_400_BAD_REQUEST)
     except UserSchedule.DoesNotExist:
         existing_schedule = None
-    
-    # Get program sections (workout days)
     sections = program.sections.filter(is_rest_day=False).order_by('order')
-    
     if sections.count() == 0:
-        return Response(
-            {"error": "Program has no workout sections"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    # Determine start date
+        return Response({"error": "Program has no workout sections"}, status=status.HTTP_400_BAD_REQUEST)
     if start_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
     else:
@@ -707,180 +603,126 @@ def generate_schedule(request):
             if days_until_monday == 0:
                 days_until_monday = 7
             start_date = today + timedelta(days=days_until_monday)
-    
-    # Build schedule for this program
-    days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     program_schedule = {}
-    
     frequency = min(program.weekly_frequency, 7)
     section_index = 0
     days_scheduled = 0
-    
-    for day in days_of_week:
+    for day in DAYS_OF_WEEK:
         if day in [d.lower() for d in rest_days]:
             program_schedule[day] = []
         elif days_scheduled < frequency and section_index < sections.count():
             program_schedule[day] = [sections[section_index].id]
             section_index += 1
             days_scheduled += 1
-            
             if section_index >= sections.count():
                 section_index = 0
         else:
             program_schedule[day] = []
-    
-    # Merge with existing schedule or create new one
     if existing_schedule:
-        # Merge the schedules
         merged_schedule = existing_schedule.weekly_schedule.copy()
         for day, section_ids in program_schedule.items():
             if day not in merged_schedule:
                 merged_schedule[day] = []
             elif merged_schedule[day] == 'rest':
                 merged_schedule[day] = []
-            
-            # Add new sections to this day
             if isinstance(merged_schedule[day], list):
                 merged_schedule[day].extend(section_ids)
             else:
                 merged_schedule[day] = section_ids
-        
         existing_schedule.weekly_schedule = merged_schedule
+        # Snapshot original schedule on first time only
+        if not existing_schedule.original_weekly_schedule:
+            existing_schedule.original_weekly_schedule = merged_schedule.copy()
         existing_schedule.save()
         existing_schedule.programs.add(program)
-        
         schedule = existing_schedule
     else:
-        # Create new schedule
         schedule = UserSchedule.objects.create(
             user=request.user,
             start_date=start_date,
             weekly_schedule=program_schedule,
-            is_active=True
+            original_weekly_schedule=program_schedule.copy(),
+            is_active=True,
         )
         schedule.programs.add(program)
-    
-    serializer = UserScheduleSerializer(schedule)
-    return Response({
-        "message": "Program added to your schedule",
-        "schedule": serializer.data
-    }, status=status.HTTP_201_CREATED)
+    return Response(
+        {"message": "Program added to your schedule", "schedule": UserScheduleSerializer(schedule).data},
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(['DELETE'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def remove_program_from_schedule(request, program_id):
-    """Remove a specific program from the user's schedule."""
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
-        return Response(
-            {"error": "No active schedule found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
     try:
         program = WorkoutPlan.objects.get(id=program_id)
     except WorkoutPlan.DoesNotExist:
-        return Response(
-            {"error": "Program not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
+        return Response({"error": "Program not found"}, status=status.HTTP_404_NOT_FOUND)
     if program not in schedule.programs.all():
-        return Response(
-            {"error": "Program not in schedule"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    # Get sections from this program
+        return Response({"error": "Program not in schedule"}, status=status.HTTP_400_BAD_REQUEST)
     program_sections = list(program.sections.values_list('id', flat=True))
-    
-    # Remove these sections from the weekly schedule
     updated_schedule = {}
     for day, section_ids in schedule.weekly_schedule.items():
-        if isinstance(section_ids, list):
-            # Filter out sections from this program
-            updated_schedule[day] = [sid for sid in section_ids if sid not in program_sections]
-        else:
-            updated_schedule[day] = section_ids
-    
+        updated_schedule[day] = (
+            [sid for sid in section_ids if sid not in program_sections]
+            if isinstance(section_ids, list)
+            else section_ids
+        )
     schedule.weekly_schedule = updated_schedule
     schedule.programs.remove(program)
-    
-    # If no programs left, deactivate schedule
     if schedule.programs.count() == 0:
         schedule.is_active = False
-    
     schedule.save()
-    
-    return Response({
-        "message": "Program removed from schedule",
-        "programs_remaining": schedule.programs.count()
-    }, status=status.HTTP_200_OK)
+    return Response(
+        {"message": "Program removed from schedule", "programs_remaining": schedule.programs.count()},
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def check_program_in_schedule(request, program_id):
-    """Check if a program is in the user's active schedule."""
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
         program = WorkoutPlan.objects.get(id=program_id)
-        
         is_in_schedule = program in schedule.programs.all()
-        
-        return Response({
-            "in_schedule": is_in_schedule,
-            "schedule_id": schedule.id if is_in_schedule else None
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {"in_schedule": is_in_schedule, "schedule_id": schedule.id if is_in_schedule else None},
+            status=status.HTTP_200_OK,
+        )
     except UserSchedule.DoesNotExist:
         return Response({"in_schedule": False}, status=status.HTTP_200_OK)
     except WorkoutPlan.DoesNotExist:
-        return Response(
-            {"error": "Program not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Program not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def get_active_schedule(request):
-    """Get user's current active workout schedule with merged programs."""
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
         serializer = UserScheduleSerializer(schedule)
-
-        # Add calendar events for the next 4 weeks
         calendar_events = []
         start_date = schedule.start_date
-        end_date = start_date + timedelta(days=27)  # 4 weeks = 28 days
-
-        sessions = WorkoutSession.objects.filter(
-            user=request.user,
-            date__range=[start_date, end_date]
-        )
+        end_date = start_date + timedelta(days=27)
+        sessions = WorkoutSession.objects.filter(user=request.user, date__range=[start_date, end_date])
         sessions_list = list(sessions)
         status_by_date = {s.date.isoformat(): s.status for s in sessions_list}
-
-        # Determine which dates already have feedback submitted
         sessions_with_feedback = set(
-            WorkoutFeedback.objects.filter(
-                session__in=sessions_list
-            ).values_list('session__date', flat=True)
+            WorkoutFeedback.objects.filter(session__in=sessions_list).values_list('session__date', flat=True)
         )
         feedback_by_date = {d.isoformat(): True for d in sessions_with_feedback}
-
-        days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-
         for week in range(4):
-            for day_index, day_name in enumerate(days_of_week):
+            for day_index, day_name in enumerate(DAYS_OF_WEEK):
                 event_date = start_date + timedelta(days=week * 7 + day_index)
                 section_ids = schedule.weekly_schedule.get(day_name, [])
-
                 if not section_ids or section_ids == 'rest':
                     calendar_events.append({
                         'date': event_date.isoformat(),
@@ -892,20 +734,15 @@ def get_active_schedule(request):
                         'has_feedback': feedback_by_date.get(event_date.isoformat(), False),
                     })
                 else:
-                    # Get all sections for this day
                     sections = []
                     total_exercises = 0
-
-                    # Handle both list and single ID formats
                     if not isinstance(section_ids, list):
                         section_ids = [section_ids] if section_ids != 'rest' else []
-
                     for section_id in section_ids:
                         try:
                             section = ProgramSection.objects.get(id=section_id)
                             exercise_count = section.exercises.count()
                             total_exercises += exercise_count
-
                             sections.append({
                                 'id': section.id,
                                 'name': section.format,
@@ -917,7 +754,6 @@ def get_active_schedule(request):
                             })
                         except ProgramSection.DoesNotExist:
                             pass
-
                     calendar_events.append({
                         'date': event_date.isoformat(),
                         'day': day_name,
@@ -927,115 +763,126 @@ def get_active_schedule(request):
                         'session_status': status_by_date.get(event_date.isoformat()),
                         'has_feedback': feedback_by_date.get(event_date.isoformat(), False),
                     })
-
-        return Response({
-            'schedule': serializer.data,
-            'calendar_events': calendar_events
-        }, status=status.HTTP_200_OK)
-
+        return Response(
+            {'schedule': serializer.data, 'calendar_events': calendar_events},
+            status=status.HTTP_200_OK,
+        )
     except UserSchedule.DoesNotExist:
-        return Response({
-            'message': 'No active schedule found',
-            'schedule': None,
-            'calendar_events': []
-        }, status=status.HTTP_200_OK)
-        
-        
+        return Response(
+            {'message': 'No active schedule found', 'schedule': None, 'calendar_events': []},
+            status=status.HTTP_200_OK,
+        )
+
+
 @api_view(['PATCH'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def update_schedule_start_date(request, schedule_id):
-    """Update the start date of a schedule."""
     try:
         schedule = UserSchedule.objects.get(id=schedule_id, user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
-        return Response(
-            {"error": "Schedule not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
+        return Response({"error": "Schedule not found"}, status=status.HTTP_404_NOT_FOUND)
     new_start_date = request.data.get('start_date')
     if not new_start_date:
-        return Response(
-            {"error": "start_date is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+        return Response({"error": "start_date is required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         schedule.start_date = datetime.strptime(new_start_date, '%Y-%m-%d').date()
         schedule.save()
-        
-        return Response({
-            "message": "Start date updated successfully",
-            "new_start_date": schedule.start_date.isoformat()
-        }, status=status.HTTP_200_OK)
-    except ValueError:
         return Response(
-            {"error": "Invalid date format. Use YYYY-MM-DD"},
-            status=status.HTTP_400_BAD_REQUEST
+            {"message": "Start date updated successfully", "new_start_date": schedule.start_date.isoformat()},
+            status=status.HTTP_200_OK,
         )
-    
-    
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PATCH'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def update_schedule_end_date(request, schedule_id):
+    try:
+        schedule = UserSchedule.objects.get(id=schedule_id, user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response({"error": "Schedule not found"}, status=status.HTTP_404_NOT_FOUND)
+    new_end_date = request.data.get('end_date')
+    if not new_end_date:
+        return Response({"error": "end_date is required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        parsed_end_date = datetime.strptime(new_end_date, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+    if parsed_end_date <= schedule.start_date:
+        return Response({"error": "end_date must be after start_date"}, status=status.HTTP_400_BAD_REQUEST)
+    schedule.end_date = parsed_end_date
+    schedule.save()
+    return Response(
+        {"message": "End date updated successfully", "new_end_date": schedule.end_date.isoformat()},
+        status=status.HTTP_200_OK,
+    )
+
+
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def get_workout_for_date(request, date_str):
-    """Get all workouts for a specific date (merged from multiple programs)."""
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
-        return Response(
-            {"error": "Invalid date format. Use YYYY-MM-DD"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
     session = WorkoutSession.objects.filter(user=request.user, date=target_date).first()
-    session_status = session.status if session else None
+    session_status_val = session.status if session else None
     has_feedback = WorkoutFeedback.objects.filter(session=session).exists() if session else False
+
+    # Load feedback details so the frontend can pre-fill the edit form
+    feedback_data = None
+    if has_feedback:
+        try:
+            fb = WorkoutFeedback.objects.get(session=session)
+            feedback_data = {
+                'difficulty_rating': fb.difficulty_rating,
+                'fatigue_level': fb.fatigue_level,
+                'pain_reported': fb.pain_reported,
+                'notes': fb.notes,
+            }
+        except WorkoutFeedback.DoesNotExist:
+            pass
 
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
-        return Response(
-            {"error": "No active schedule found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
     day_name = target_date.strftime('%A').lower()
     section_ids = schedule.weekly_schedule.get(day_name, [])
-
     if not isinstance(section_ids, list):
         section_ids = [section_ids] if section_ids != 'rest' else []
-
-    if not section_ids or section_ids == 'rest':
+    if not section_ids:
         return Response({
             'date': date_str,
             'is_rest_day': True,
             'message': 'Rest day - recovery is important!',
             'workouts': [],
-            'session_status': session_status,
+            'session_status': session_status_val,
             'has_feedback': has_feedback,
+            'feedback': feedback_data,
         }, status=status.HTTP_200_OK)
-
     workouts = []
     for section_id in section_ids:
         try:
             section = ProgramSection.objects.get(id=section_id)
-            serializer = ProgramSectionSerializer(section)
             workouts.append({
                 'program_name': section.program.name,
-                'section': serializer.data
+                'section': ProgramSectionSerializer(section).data,
             })
         except ProgramSection.DoesNotExist:
             pass
-
     return Response({
         'date': date_str,
         'is_rest_day': False,
         'workouts': workouts,
         'total_exercises': sum(len(w['section']['exercises']) for w in workouts),
-        'session_status': session_status,
+        'session_status': session_status_val,
         'has_feedback': has_feedback,
+        'feedback': feedback_data,
     }, status=status.HTTP_200_OK)
 
 
@@ -1043,49 +890,36 @@ def get_workout_for_date(request, date_str):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def workout_history(request):
-    start = request.GET.get("start") 
-    end = request.GET.get("end")    
-
-    qs = WorkoutSession.objects.filter(
-        user=request.user,
-        is_completed=True
-    )
+    start = request.GET.get("start")
+    end   = request.GET.get("end")
+    qs = WorkoutSession.objects.filter(user=request.user, status='completed')
     if start:
         qs = qs.filter(date__gte=start)
     if end:
         qs = qs.filter(date__lte=end)
-
     qs = qs.order_by("-date")
+    return Response(
+        {"total": qs.count(), "sessions": WorkoutSessionSerializer(qs, many=True).data},
+        status=status.HTTP_200_OK,
+    )
 
-    serializer = WorkoutSessionSerializer(qs, many=True)
-
-    return Response({
-        "total": qs.count(),
-        "sessions": serializer.data
-    }, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def start_workout_session(request, date_str):
-    """Create (or reuse) today's session and mark it in_progress."""
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
-
     session, created = WorkoutSession.objects.get_or_create(
-        user=request.user,
-        date=target_date,
-        defaults={"status": "in_progress", "is_completed": False}
+        user=request.user, date=target_date,
+        defaults={"status": "in_progress", "is_completed": False},
     )
-
-    # If it already existed and was completed, keep it completed (don’t “incomplete”)
     if session.status != "completed":
         session.status = "in_progress"
         session.is_completed = False
         session.save()
-
     return Response({
         "message": "Workout session started",
         "date": session.date.isoformat(),
@@ -1098,27 +932,19 @@ def start_workout_session(request, date_str):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def complete_workout_session(request, date_str):
-    """Mark a session completed. If duration not provided, default to plan.session_length from schedule."""
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
-
     session, _ = WorkoutSession.objects.get_or_create(
-        user=request.user,
-        date=target_date,
-        defaults={"status": "in_progress", "is_completed": False}
+        user=request.user, date=target_date,
+        defaults={"status": "in_progress", "is_completed": False},
     )
-
-    # Mark completed
     session.status = "completed"
     session.is_completed = True
-
     notes = request.data.get("notes", "")
     if notes is not None:
         session.notes = notes
-
-    # 1) If frontend sent duration_minutes, use it
     duration_minutes = request.data.get("duration_minutes", None)
     if duration_minutes is not None:
         try:
@@ -1126,36 +952,20 @@ def complete_workout_session(request, date_str):
         except (ValueError, TypeError):
             return Response({"error": "duration_minutes must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
     else:
-        # 2) Otherwise default from the scheduled plan's session_length
         try:
             schedule = UserSchedule.objects.get(user=request.user, is_active=True)
-            day_name = target_date.strftime('%A').lower()  # monday, tuesday, ...
+            day_name = target_date.strftime('%A').lower()
             section_ids = schedule.weekly_schedule.get(day_name, [])
-
-            # normalize to list
             if not isinstance(section_ids, list):
                 section_ids = [section_ids] if section_ids != 'rest' else []
-
-            # pick first scheduled section as the "plan" for the day
             if section_ids:
                 section = ProgramSection.objects.select_related("program").get(id=section_ids[0])
-
-                # link session to plan (nice to have)
                 session.plan = section.program
-
-                # set duration from plan if missing
                 if session.duration_minutes in (None, 0):
                     session.duration_minutes = section.program.session_length
-
-                # store plan_name for convenience (optional)
-                # (only if your serializer exposes it; otherwise ignore)
-        except UserSchedule.DoesNotExist:
+        except (UserSchedule.DoesNotExist, ProgramSection.DoesNotExist):
             pass
-        except ProgramSection.DoesNotExist:
-            pass
-
     session.save()
-
     return Response({
         "message": "Workout session completed",
         "date": session.date.isoformat(),
@@ -1165,65 +975,82 @@ def complete_workout_session(request, date_str):
         "notes": session.notes,
         "plan": session.plan.name if session.plan else None,
     }, status=status.HTTP_200_OK)
-    
 
-@api_view(['GET', 'POST'])
+
+@api_view(['DELETE'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
-def workout_feedback(request, date_str):
-    """GET existing feedback or POST new feedback for a completed session."""
+def undo_workout_session(request, date_str):
+    """
+    Undo a completed workout session — marks it back to 'in_progress'
+    and removes any associated feedback.
+    """
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
-        return Response(
-            {"error": "Invalid date format. Use YYYY-MM-DD"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         session = WorkoutSession.objects.get(user=request.user, date=target_date)
     except WorkoutSession.DoesNotExist:
-        return Response(
-            {"error": "No session found for this date"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "No session found for this date"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Remove feedback first if it exists
+    WorkoutFeedback.objects.filter(session=session).delete()
+
+    session.status = "in_progress"
+    session.is_completed = False
+    session.save()
+
+    return Response({
+        "message": "Workout session reset to in-progress",
+        "date": date_str,
+        "status": session.status,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET', 'POST', 'PATCH', 'DELETE'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def workout_feedback(request, date_str):
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        session = WorkoutSession.objects.get(user=request.user, date=target_date)
+    except WorkoutSession.DoesNotExist:
+        return Response({"error": "No session found for this date"}, status=status.HTTP_404_NOT_FOUND)
+
+    # ── GET ──────────────────────────────────────────────────────────────────
     if request.method == 'GET':
         try:
             feedback = WorkoutFeedback.objects.get(session=session)
-            serializer = WorkoutFeedbackSerializer(feedback)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(WorkoutFeedbackSerializer(feedback).data, status=status.HTTP_200_OK)
         except WorkoutFeedback.DoesNotExist:
-            return Response(
-                {"error": "No feedback found for this session"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "No feedback found for this session"}, status=status.HTTP_404_NOT_FOUND)
 
-    # POST — validate session is completed first
+    # ── DELETE ───────────────────────────────────────────────────────────────
+    if request.method == 'DELETE':
+        deleted_count, _ = WorkoutFeedback.objects.filter(session=session).delete()
+        if deleted_count == 0:
+            return Response({"error": "No feedback found to delete"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": "Feedback removed successfully"}, status=status.HTTP_200_OK)
+
+    # ── POST / PATCH ─────────────────────────────────────────────────────────
     if not session.is_completed:
         return Response(
             {"error": "Cannot submit feedback for an incomplete workout session"},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
-
-    # Validate difficulty_rating (required, 1–5)
     difficulty_rating = request.data.get('difficulty_rating')
     if difficulty_rating is None:
-        return Response(
-            {"error": "difficulty_rating is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "difficulty_rating is required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         difficulty_rating = int(difficulty_rating)
         if not 1 <= difficulty_rating <= 5:
             raise ValueError
     except (ValueError, TypeError):
-        return Response(
-            {"error": "difficulty_rating must be an integer between 1 and 5"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Validate fatigue_level (optional, 1–5 if provided)
+        return Response({"error": "difficulty_rating must be an integer between 1 and 5"}, status=status.HTTP_400_BAD_REQUEST)
     fatigue_level = request.data.get('fatigue_level')
     if fatigue_level is not None:
         try:
@@ -1231,28 +1058,21 @@ def workout_feedback(request, date_str):
             if not 1 <= fatigue_level <= 5:
                 raise ValueError
         except (ValueError, TypeError):
-            return Response(
-                {"error": "fatigue_level must be an integer between 1 and 5"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "fatigue_level must be an integer between 1 and 5"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         feedback = WorkoutFeedback.objects.get(session=session)
         created = False
     except WorkoutFeedback.DoesNotExist:
         feedback = WorkoutFeedback(session=session)
         created = True
-
     feedback.difficulty_rating = difficulty_rating
     feedback.fatigue_level = fatigue_level
     feedback.pain_reported = bool(request.data.get('pain_reported', False))
     feedback.notes = request.data.get('notes', '')
     feedback.save()
-
-    serializer = WorkoutFeedbackSerializer(feedback)
     return Response(
-        serializer.data,
-        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        WorkoutFeedbackSerializer(feedback).data,
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
     )
 
 
@@ -1260,79 +1080,428 @@ def workout_feedback(request, date_str):
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def deactivate_schedule(request):
-    """Deactivate the user's current schedule."""
-    updated_count = UserSchedule.objects.filter(
-        user=request.user,
-        is_active=True
-    ).update(is_active=False)
-    
+    updated_count = UserSchedule.objects.filter(user=request.user, is_active=True).update(is_active=False)
+    return Response(
+        {'message': f'Deactivated {updated_count} schedule(s)', 'count': updated_count},
+        status=status.HTTP_200_OK,
+    )
+
+
+# ============================================================================
+# US2.3 — SHARED ANALYSIS HELPER
+# ============================================================================
+
+def _analyze_feedback(user):
+    """
+    Analyze the last 7 days of feedback and compute what the new schedule
+    should look like. Returns (schedule, suggestion_dict, error_str).
+    Does NOT save anything to the database.
+
+    FIXED: Pain day now uses _find_next_workout_day() instead of a hardcoded
+    +2 day offset that always wrongly produced Monday→Wednesday, Tuesday→Thursday.
+    """
+    try:
+        schedule = UserSchedule.objects.get(user=user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return None, None, "No active schedule found"
+
+    week_ago = datetime.now().date() - timedelta(days=7)
+    recent_feedback = WorkoutFeedback.objects.filter(
+        session__user=user,
+        session__date__gte=week_ago,
+        session__status='completed',
+    ).select_related('session')
+
+    if not recent_feedback.exists():
+        return schedule, None, None
+
+    difficulty_ratings = [f.difficulty_rating for f in recent_feedback if f.difficulty_rating]
+    fatigue_levels     = [f.fatigue_level     for f in recent_feedback if f.fatigue_level]
+    pain_reported      = any(f.pain_reported  for f in recent_feedback)
+
+    avg_difficulty = sum(difficulty_ratings) / len(difficulty_ratings) if difficulty_ratings else 3.0
+    avg_fatigue    = sum(fatigue_levels) / len(fatigue_levels)         if fatigue_levels     else avg_difficulty
+    stress_score   = (avg_difficulty + avg_fatigue) / 2
+
+    # ── FIXED: find the actual pain day, then walk the schedule for the
+    # correct next workout day (not a hardcoded +2 offset) ──────────────────
+    pain_day = None
+    pain_session_date      = None
+    pain_next_workout_day  = None
+    pain_next_workout_date = None
+    recovery_options = []
+
+    if pain_reported:
+        pain_feedback = (
+            recent_feedback.filter(pain_reported=True).order_by('-session__date').first()
+        )
+        if pain_feedback:
+            # Use isoweekday()-based lookup (Monday=1 ... Sunday=7) instead of
+            # strftime('%A').lower() which can be affected by locale/timezone settings
+            # and produce the wrong day name (e.g. "wednesday" for a monday session).
+            weekday_to_name = {
+                1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday',
+                5: 'friday', 6: 'saturday', 7: 'sunday',
+            }
+            pain_day = weekday_to_name[pain_feedback.session.date.isoweekday()]
+            # Also store the raw ISO date so the frontend can re-derive pain_day
+            # client-side using parseLocalDate (zero timezone offset)
+            pain_session_date = pain_feedback.session.date.isoformat()
+            pain_next_workout_day, pain_next_workout_date = _find_next_workout_day(
+                schedule.weekly_schedule, pain_day
+            )
+            # Look up the current session_length for the affected program (if any)
+            current_duration = 45  # sensible default
+            day_sections = schedule.weekly_schedule.get(pain_next_workout_day or '', [])
+            if isinstance(day_sections, list) and day_sections:
+                try:
+                    section = ProgramSection.objects.select_related('program').get(id=day_sections[0])
+                    current_duration = section.program.session_length or 45
+                except ProgramSection.DoesNotExist:
+                    pass
+            recovery_options = _build_recovery_options(
+                pain_day, pain_next_workout_day, pain_next_workout_date, current_duration
+            )
+
+    current  = schedule.weekly_schedule
+    workout_days = [d for d in DAYS_OF_WEEK if _is_workout_day(current.get(d))]
+    rest_days    = [d for d in DAYS_OF_WEEK if d not in workout_days]
+    new_schedule = {d: current.get(d, []) for d in DAYS_OF_WEEK}
+    adjustment   = "none"
+    reason = (
+        f"Your stress score was {round(stress_score, 1)} "
+        f"(difficulty: {round(avg_difficulty, 1)}, fatigue: {round(avg_fatigue, 1)}) "
+        f"— your schedule looks balanced, no changes needed."
+    )
+
+    # Pain takes priority — surface the options modal instead of auto-removing
+    if pain_reported and pain_day:
+        adjustment = "pain"
+        reason = (
+            f"You reported pain on {pain_day.capitalize()}. "
+            f"{'Your next workout day is ' + pain_next_workout_day.capitalize() + '.' if pain_next_workout_day else ''} "
+            f"Choose how you'd like to handle it below."
+        )
+    # Stress-score adjustments (only when no pain)
+    elif stress_score >= 4.0:
+        days_to_remove = min(2, max(0, len(workout_days) - 2))
+        removed = []
+        for _ in range(days_to_remove):
+            if len(workout_days) > 2:
+                day_to_remove = workout_days[-1]
+                new_schedule[day_to_remove] = []
+                workout_days = workout_days[:-1]
+                removed.append(day_to_remove.capitalize())
+        adjustment = "recovery"
+        reason = (
+            f"Your stress score was {round(stress_score, 1)} "
+            f"(difficulty: {round(avg_difficulty, 1)}, fatigue: {round(avg_fatigue, 1)}) — very high. "
+            f"A recovery week is recommended"
+            + (f" by removing {', '.join(removed)}." if removed else ".")
+            + " Rest is essential to prevent burnout and injury."
+        )
+    elif stress_score >= 3.5:
+        if len(workout_days) > 3:
+            day_to_remove = workout_days[-1]
+            new_schedule[day_to_remove] = []
+            workout_days = workout_days[:-1]
+            adjustment = "reduced"
+            reason = (
+                f"Your stress score was {round(stress_score, 1)} "
+                f"(difficulty: {round(avg_difficulty, 1)}, fatigue: {round(avg_fatigue, 1)}) — slightly high. "
+                f"Removing {day_to_remove.capitalize()} as a workout day is recommended."
+            )
+    elif stress_score <= 2.0:
+        candidate_rest = [d for d in rest_days if d != 'sunday']
+        source_day     = workout_days[0] if workout_days else None
+        if source_day and candidate_rest and len(workout_days) < 6:
+            new_day = candidate_rest[0]
+            new_schedule[new_day] = current[source_day]
+            workout_days.append(new_day)
+            adjustment = "increased"
+            reason = (
+                f"Your stress score was {round(stress_score, 1)} "
+                f"(difficulty: {round(avg_difficulty, 1)}, fatigue: {round(avg_fatigue, 1)}) — your body is handling the load well. "
+                f"Adding {new_day.capitalize()} as an extra workout day is recommended."
+            )
+
+    workout_days_after = len([d for d in DAYS_OF_WEEK if _is_workout_day(new_schedule.get(d))])
+
+    suggestion = {
+        "regenerated":              True,
+        "adjustment":               adjustment,
+        "stress_score":             round(stress_score, 1),
+        "avg_difficulty":           round(avg_difficulty, 1),
+        "avg_fatigue":              round(avg_fatigue, 1),
+        "pain_reported":            pain_reported,
+        # Legacy field kept for non-pain paths
+        "pain_day_cleared":         pain_next_workout_day,
+        # New explicit fields
+        "pain_day":                 pain_day,
+        "pain_session_date":        pain_session_date if pain_reported else None,
+        "pain_next_workout_day":    pain_next_workout_day,
+        "pain_next_workout_date":   pain_next_workout_date,
+        "recovery_options":         recovery_options,
+        "workout_days_count":       workout_days_after,
+        "reason":                   reason,
+        # Internal — stripped before sending to frontend
+        "_new_schedule":            new_schedule,
+    }
+    return schedule, suggestion, None
+
+
+# ============================================================================
+# US2.3 — PREVIEW: analyze feedback, return suggestion WITHOUT saving
+# ============================================================================
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def regenerate_schedule_preview(request):
+    """
+    Analyze last 7 days of feedback and return a suggestion.
+    Does NOT modify the schedule.
+    """
+    schedule, suggestion, error = _analyze_feedback(request.user)
+    if error:
+        return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
+    if suggestion is None:
+        return Response({
+            "message": "No recent feedback found. Complete workouts and rate them to enable auto-adjustment.",
+            "regenerated": False,
+        }, status=status.HTTP_200_OK)
+    response_data = {k: v for k, v in suggestion.items() if not k.startswith('_')}
+    return Response(response_data, status=status.HTTP_200_OK)
+
+
+# ============================================================================
+# US2.3 — APPLY: user accepted the suggestion, now save it
+# ============================================================================
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def regenerate_schedule_apply(request):
+    """
+    Re-run the analysis and apply the result (non-pain path only).
+    Called when the user clicks "Accept" for stress-score adjustments.
+    """
+    schedule, suggestion, error = _analyze_feedback(request.user)
+    if error:
+        return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
+    if suggestion is None:
+        return Response({"message": "No recent feedback found.", "regenerated": False}, status=status.HTTP_200_OK)
+
+    # Pain suggestions must go through apply_recovery_option instead
+    if suggestion.get('adjustment') == 'pain':
+        return Response(
+            {"error": "Pain recovery requires choosing an option via /schedule/apply-recovery-option/"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Snapshot original before first adjustment
+    if not schedule.original_weekly_schedule:
+        schedule.original_weekly_schedule = schedule.weekly_schedule.copy()
+
+    schedule.weekly_schedule = suggestion['_new_schedule']
+    schedule.is_adjusted = True
+    schedule.save()
+
+    response_data = {k: v for k, v in suggestion.items() if not k.startswith('_')}
+    response_data["message"] = "Schedule updated based on your feedback"
+
+    # Build next_week_changes for the banner
+    original = schedule.original_weekly_schedule or {}
+    next_week_changes = []
+    for day in DAYS_OF_WEEK:
+        was_workout = _is_workout_day(original.get(day))
+        is_workout  = _is_workout_day(schedule.weekly_schedule.get(day))
+        if was_workout != is_workout:
+            next_week_changes.append({
+                'day': day,
+                'from': 'workout' if was_workout else 'rest',
+                'to':   'workout' if is_workout  else 'rest',
+            })
+    response_data["next_week_changes"] = next_week_changes
+
+    return Response(response_data, status=status.HTTP_200_OK)
+
+
+# ============================================================================
+# PAIN RECOVERY — Apply a specific user-chosen option
+# ============================================================================
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def apply_recovery_option(request):
+    """
+    Apply the specific pain recovery option the user chose in the modal.
+
+    option_id values:
+      rest_next      — make the next workout day a rest day
+      shorter_workout — record a duration override for that day (future-session hint)
+      lighter_focus  — swap that day to a mobility/lighter section
+      rest_same_day  — mark the pain day itself as rest
+      keep_going     — no changes
+    """
+    try:
+        schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
+
+    option_id      = request.data.get('option_id')
+    affected_day   = request.data.get('affected_day')
+    affected_date  = request.data.get('affected_date')
+    change_type    = request.data.get('change_type')
+    duration_mins  = request.data.get('duration_minutes')
+    pain_day       = request.data.get('pain_day')
+
+    valid_option_ids = {'rest_next', 'shorter_workout', 'lighter_focus', 'rest_same_day', 'keep_going'}
+    if option_id not in valid_option_ids:
+        return Response({"error": f"Invalid option_id. Must be one of: {', '.join(valid_option_ids)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    next_week_changes = []
+    reason = ""
+
+    if option_id == 'keep_going':
+        return Response({
+            "message": "Schedule unchanged.",
+            "reason": "Got it — keep an eye on that pain and listen to your body.",
+            "next_week_changes": [],
+        }, status=status.HTTP_200_OK)
+
+    # Snapshot original before first adjustment
+    if not schedule.original_weekly_schedule:
+        schedule.original_weekly_schedule = schedule.weekly_schedule.copy()
+
+    new_schedule = schedule.weekly_schedule.copy()
+
+    if option_id == 'rest_next' and affected_day and affected_day in DAYS_OF_WEEK:
+        was_workout = _is_workout_day(new_schedule.get(affected_day))
+        new_schedule[affected_day] = []
+        if was_workout:
+            next_week_changes.append({'day': affected_day, 'from': 'workout', 'to': 'rest'})
+        reason = f"{affected_day.capitalize()} switched to a rest day to support your recovery."
+
+    elif option_id == 'shorter_workout' and affected_day and affected_day in DAYS_OF_WEEK:
+        # We keep the section IDs intact so exercises still show up;
+        # the duration hint is stored in schedule.duration_overrides (add this
+        # JSON field to your model if you want to persist it, or use a session note).
+        # For now we annotate the schedule with a day-level duration override.
+        overrides = schedule.duration_overrides if hasattr(schedule, 'duration_overrides') and schedule.duration_overrides else {}
+        overrides[affected_day] = int(duration_mins) if duration_mins else 27
+        if hasattr(schedule, 'duration_overrides'):
+            schedule.duration_overrides = overrides
+        next_week_changes.append({'day': affected_day, 'from': 'workout', 'to': 'workout'})
+        reason = f"{affected_day.capitalize()}'s workout shortened to {overrides[affected_day]} minutes."
+
+    elif option_id == 'lighter_focus' and affected_day and affected_day in DAYS_OF_WEEK:
+        # Tag the day in a focus_overrides dict so the frontend/session can
+        # display "mobility day". The section IDs remain so exercises still load.
+        focus_overrides = schedule.focus_overrides if hasattr(schedule, 'focus_overrides') and schedule.focus_overrides else {}
+        focus_overrides[affected_day] = 'mobility'
+        if hasattr(schedule, 'focus_overrides'):
+            schedule.focus_overrides = focus_overrides
+        next_week_changes.append({'day': affected_day, 'from': 'workout', 'to': 'workout'})
+        reason = f"{affected_day.capitalize()} swapped to mobility/stretching."
+
+    elif option_id == 'rest_same_day' and pain_day and pain_day in DAYS_OF_WEEK:
+        was_workout = _is_workout_day(new_schedule.get(pain_day))
+        new_schedule[pain_day] = []
+        if was_workout:
+            next_week_changes.append({'day': pain_day, 'from': 'workout', 'to': 'rest'})
+        reason = f"{pain_day.capitalize()} marked as a rest day. Rest up and recover."
+
+    else:
+        return Response({"error": "Invalid option parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+    schedule.weekly_schedule = new_schedule
+    schedule.is_adjusted = True
+    schedule.save()
+
     return Response({
-        'message': f'Deactivated {updated_count} schedule(s)',
-        'count': updated_count
+        "message": "Recovery option applied.",
+        "reason": reason,
+        "next_week_changes": next_week_changes,
     }, status=status.HTTP_200_OK)
-    
+
+
+# ============================================================================
+# REVERT schedule to its original (pre-adjustment) state
+# ============================================================================
+
+@api_view(['POST'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def revert_schedule(request):
+    """
+    Restore weekly_schedule to the original snapshot taken when the
+    schedule was first created / first program was added.
+    """
+    try:
+        schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not schedule.original_weekly_schedule:
+        return Response(
+            {"error": "No original schedule snapshot found. Nothing to revert to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    schedule.weekly_schedule = schedule.original_weekly_schedule.copy()
+    schedule.is_adjusted = False
+    # Clear any per-day overrides if your model has them
+    if hasattr(schedule, 'duration_overrides'):
+        schedule.duration_overrides = {}
+    if hasattr(schedule, 'focus_overrides'):
+        schedule.focus_overrides = {}
+    schedule.save()
+
+    return Response({
+        "message": "Schedule reverted to original.",
+        "reason": "Your schedule has been restored to its original weekly plan.",
+    }, status=status.HTTP_200_OK)
+
+
+# ============================================================================
+# TRAINER PROGRAM FEEDBACK
+# ============================================================================
+
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
-def trainer_program_feedback(request, program_id): # to be used in US2.4 by Kevin (Weiqin Situ)
-    """
-    Return aggregated feedback for a trainer's program.
-    - Average difficulty and fatigue per program
-    - Individual session feedback entries (user identity anonymized)
-    - Weekly trend data (avg difficulty per week)
-    """
-    # Verify program exists and belongs to this trainer
+def trainer_program_feedback(request, program_id):
     try:
         program = WorkoutPlan.objects.get(id=program_id, trainer=request.user)
     except WorkoutPlan.DoesNotExist:
         return Response(
             {"error": "Program not found or you do not own this program"},
-            status=status.HTTP_404_NOT_FOUND
+            status=status.HTTP_404_NOT_FOUND,
         )
-
-    # Get all completed sessions for this program that have feedback
     feedbacks = WorkoutFeedback.objects.filter(
-        session__plan=program,
-        session__is_completed=True
+        session__plan=program, session__is_completed=True
     ).select_related('session')
-
     if not feedbacks.exists():
         return Response({
-            "program_id": program_id,
-            "program_name": program.name,
-            "total_responses": 0,
-            "avg_difficulty": None,
-            "avg_fatigue": None,
-            "pain_reported_count": 0,
-            "weekly_trends": [],
-            "entries": []
+            "program_id": program_id, "program_name": program.name,
+            "total_responses": 0, "avg_difficulty": None, "avg_fatigue": None,
+            "pain_reported_count": 0, "weekly_trends": [], "entries": [],
         }, status=status.HTTP_200_OK)
-
-    # Aggregate stats
     total = feedbacks.count()
-    avg_difficulty = round(
-        sum(f.difficulty_rating for f in feedbacks) / total, 2
-    )
+    avg_difficulty = round(sum(f.difficulty_rating for f in feedbacks) / total, 2)
     fatigue_entries = [f.fatigue_level for f in feedbacks if f.fatigue_level is not None]
     avg_fatigue = round(sum(fatigue_entries) / len(fatigue_entries), 2) if fatigue_entries else None
     pain_count = feedbacks.filter(pain_reported=True).count()
-
-    # Weekly trend — group by ISO week, avg difficulty per week
     from collections import defaultdict
     weekly_data = defaultdict(list)
     for f in feedbacks:
-        week_key = f.session.date.strftime('%Y-W%W')
-        weekly_data[week_key].append(f.difficulty_rating)
+        weekly_data[f.session.date.strftime('%Y-W%W')].append(f.difficulty_rating)
     weekly_trends = [
-        {
-            "week": week,
-            "avg_difficulty": round(sum(vals) / len(vals), 2),
-            "response_count": len(vals)
-        }
+        {"week": week, "avg_difficulty": round(sum(vals) / len(vals), 2), "response_count": len(vals)}
         for week, vals in sorted(weekly_data.items())
     ]
-
-    # Individual entries — anonymized (no username, no user ID)
     entries = [
         {
             "date": f.session.date.isoformat(),
@@ -1343,14 +1512,9 @@ def trainer_program_feedback(request, program_id): # to be used in US2.4 by Kevi
         }
         for f in feedbacks.order_by('-session__date')
     ]
-
     return Response({
-        "program_id": program_id,
-        "program_name": program.name,
-        "total_responses": total,
-        "avg_difficulty": avg_difficulty,
-        "avg_fatigue": avg_fatigue,
-        "pain_reported_count": pain_count,
-        "weekly_trends": weekly_trends,
-        "entries": entries
+        "program_id": program_id, "program_name": program.name,
+        "total_responses": total, "avg_difficulty": avg_difficulty,
+        "avg_fatigue": avg_fatigue, "pain_reported_count": pain_count,
+        "weekly_trends": weekly_trends, "entries": entries,
     }, status=status.HTTP_200_OK)
