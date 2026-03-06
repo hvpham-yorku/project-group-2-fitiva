@@ -1,4 +1,4 @@
-# Fitiva — Group 2 — Iteration 1 Log
+# Fitiva — Group 2 — Iteration 2 Log
 
 # To see the ITR2 Source Code, please checkout to the branch called ITR2
 
@@ -45,7 +45,7 @@ We organized the codebase by layers and features, aligning with a clean separati
 - **HTTP/API layer:** `views.py` + `urls.py`  
   Implements endpoints for auth, profile CRUD, programs CRUD, and exercise template listing/search.
 - **Automated tests:** `tests.py`  
-  Covers authentication and profile operations for iteration 1.
+  Covers authentication and profile operations for iteration 2.
 
 ## 1.3 Major Design Decisions (and Why)
 
@@ -80,7 +80,7 @@ Fitiva supports **full dark mode** across the entire app using CSS variables in 
 
 ### Decision F — Drag-and-drop reordering uses native HTML5 API
 We implemented drag-and-drop reordering of exercises **within a day** using the native HTML5 drag-and-drop API.
-- We restrict moves to the same day to keep behavior predictable and reduce complexity in ITR1.
+- We restrict moves to the same day to keep behavior predictable and reduce complexity in ITR2.
 - Handlers are defined at the component level (not nested) to avoid React re-render issues.
 
 ## 1.4 Domain Model Rationale (Backend)
@@ -95,19 +95,19 @@ Key domain objects and why they exist:
 - **WorkoutSession / WorkoutFeedback**: created for future stories (completion tracking + post-workout feedback) and aligns with Big Stories 2 & 3.
 ---
 
-# 3. Plan Revision (ITR0 → ITR1)
+# 3. Plan Revision (ITR0 → ITR2)
 This section documents what changed from the **Iteration 0 plan** to the **Iteration 1 plan**, and why.
 
 ## 3.1 Original Plan (ITR0 Snapshot)
-**ITR1 User Stories included:**
+**ITR2 User Stories included:**
 - US 1.1 Register & Log In
 - US 1.2 Create Fitness Profile
 - US 1.3 View Profile-Based Recommendations
 - US 1.4 Browse Trainer-Created Programs
 - US 1.5 Select Plan + Auto-Generate Weekly Schedule
 
-## 3.2 Revised Plan (ITR1 Updated)
-**Changes introduced in ITR1 planning update:**
+## 3.2 Revised Plan (ITR2 Updated)
+**Changes introduced in ITR2 planning update:**
 - Added **US 1.3: Create Programs from list of workouts** (trainer program builder)
 - Added **US 1.4: View List of Workouts** (catalog of workouts)
 - Reordered/renamed some stories for clearer scope:
@@ -120,7 +120,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 - The team needed an explicit workflow for trainers to build programs (US 1.3) and for users to browse workouts before committing (US 1.4).
 - The schedule/calendar experience (US 3.6) was introduced to make weekly planning visible and testable in the UI early.
 
-*(Keep both planning docs in the repo, e.g., `/docs/ITR0-Plan.md` and `/docs/ITR1-Plan.md` or similar.)*
+*(Keep both planning docs in the repo, e.g., `/docs/ITR0-Plan.md` and `/docs/ITR2-Plan.md` or similar.)*
 
 ---
 
@@ -168,17 +168,17 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Duration:** 30 minutes  
 **Agenda:**
 - Reviewed Iteration 0 submission for completeness
-- Planned and divided ITR1 tasks and stories
+- Planned and divided ITR2 tasks and stories
 
 **Decisions:**
-- Each team member assigned at least one user story for ITR1 implementation
+- Each team member assigned at least one user story for ITR2 implementation
 
 ## Meeting 5 — Jan 28, 2026
 **Attendees:** All team members  
 **Duration:** 30 minutes  
 **Agenda:**
 - Revised planning document for submission quality and clarity
-- Confirmed estimates + scope for ITR1
+- Confirmed estimates + scope for ITR2
 
 **Decisions:**
 - Team began implementation work on assigned stories
@@ -221,7 +221,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 - Status: **US 1.4, 1.5, 1.6 completed by this point**
 
 **Decisions:**
-- Finish all ITR1 documentation
+- Finish all ITR2 documentation
 - Final coding touches for US 1.1–1.6
 - Complete remaining work for US 3.1 and US 3.6
 
@@ -229,7 +229,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 **Attendees:** All team members  
 **Duration:** 30 minutes  
 **Agenda:**
-- Final review of ITR1 documentation for submission readiness
+- Final review of ITR2 documentation for submission readiness
 - Demo/review: features for US 3.1 & US 3.6
 - Assigned at least one story per member to begin ITR2 planning
 
@@ -239,7 +239,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 ---
 
 # 5. Task Assignments, Estimates, and Actuals (Per User Story)
-> **Rule:** Include all planned tasks for ITR1 (done or not), and record estimate vs actual time.
+> **Rule:** Include all planned tasks for ITR2 (done or not), and record estimate vs actual time.
 
 ## 5.1 Summary Table
 
@@ -361,7 +361,7 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
   - Domain models (Profile, Program, Workout, Schedule)
   - Recommendation logic
   - Schedule generation and completion tracking
-- Result: All tests passing on latest ITR1 tag.
+- Result: All tests passing on latest ITR2 tag.
 
 *(to run tests locally: `docker-compose exec backend python manage.py test api --verbosity=2`)*
 *(this will only work after running `docker-compose up -d` to start the containers)
@@ -370,14 +370,14 @@ This section documents what changed from the **Iteration 0 plan** to the **Itera
 
 # 7. Release & Repository Notes
 - Commit strategy: frequent commits across team members; avoided last-minute “mega commits”.
-- Tag: `ITR1` created on a commit **before** Feb 13, 2026 11:59 PM.
+- Tag: `ITR2` created on a commit **before** the due date.
 - Repo contains:
   - `frontend/` frontend container
   - `frontend/src` frontend source code
   - `backend/` backend container
   - `backend/api` backend source code
   - `backend/api/tests` test cases folder
-  - `docs/` planning documents (ITR0 + ITR1 (log.md, etc.)
+  - `docs/` planning documents (ITR0 + ITR1 + ITR2 (log.md, etc.)
   - `Github Wiki` wiki + architecture sketch references
 
 ---
@@ -388,7 +388,8 @@ we don't have any concerns with the project or group members.
 ---
 
 # 9. Next Steps (Preview for ITR2)
-- Identify ITR2 stories (assigned in Meeting 10)
+- Identify ITR3 stories
 - Plan improvements:
   - Expand tests and UI polish
   - Add dashboards rewards/reflection flows
+  - Make a better dashboard UI
