@@ -16,6 +16,7 @@ urlpatterns = [
     path("auth/login/", views.login_view, name="login"),
     path("auth/logout/", views.logout_view, name="logout"),
     path("auth/me/", views.me, name="me"),
+    path('trainer/programs/<int:program_id>/feedback/', views.trainer_program_feedback, name='trainer-program-feedback'),
     
     # ========================================
     # User Profile Endpoints
