@@ -524,7 +524,7 @@ class WorkoutFeedbackSerializer(serializers.ModelSerializer):
             'id', 'session', 'difficulty_rating', 'fatigue_level',
             'pain_reported', 'notes', 'created_at'
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['id', 'session','created_at']
 
 
 # add schedule serializer

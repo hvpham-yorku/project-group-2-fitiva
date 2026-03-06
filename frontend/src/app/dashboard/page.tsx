@@ -7,6 +7,15 @@ import { profileAPI } from '@/library/api';
 import Logo from '@/components/ui/Logo';
 import SettingsModal from '@/components/ui/SettingsModal';
 import './dashboard.css';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 
 // ============================================================================
 // TYPES
@@ -27,7 +36,13 @@ interface Program {
   is_deleted: boolean;
   created_at: string;
 }
-
+interface WorkoutHistorySession {
+  id: number;
+  date: string;                 // "YYYY-MM-DD"
+  plan_name?: string | null;
+  duration_minutes?: number | null;
+  notes?: string;
+}
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -86,6 +101,58 @@ export default function DashboardPage() {
   const [programsCount, setProgramsCount] = useState(0);
   const [activeProgramsCount, setActiveProgramsCount] = useState(0);
   const [statsLoading, setStatsLoading] = useState(true);
+
+    // Member workout history + stats
+  const [historySessions, setHistorySessions] = useState<WorkoutHistorySession[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+const buildMonSunWeekData = (sessions: WorkoutHistorySession[]) => {
+  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  const toLocalISODate = (dt: Date) => {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // ✅ Anchor week to latest session date if we have any
+  const anchor = sessions.length
+    ? new Date(sessions.map(s => s.date).sort().slice(-1)[0] + "T12:00:00")
+    : new Date();
+
+  // Find Monday of anchor week (local time)
+  const day = anchor.getDay(); // Sun=0..Sat=6
+  const diffToMonday = (day + 6) % 7;
+
+  const monday = new Date(anchor);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(anchor.getDate() - diffToMonday);
+
+  // Sum minutes by date (dates are already YYYY-MM-DD from backend)
+  const minutesByDate = new Map<string, number>();
+  for (const s of sessions) {
+    const m = typeof s.duration_minutes === 'number' ? s.duration_minutes : 0;
+    minutesByDate.set(s.date, (minutesByDate.get(s.date) ?? 0) + m);
+  }
+
+  // Build Mon..Sun
+  const week = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const iso = toLocalISODate(d);
+
+    const mins = minutesByDate.get(iso) ?? 0;
+    const hours = Math.round((mins) * 10) / 10;
+    week.push({ day: labels[i], hours, iso }); // include iso for debugging
+  }
+
+  console.log("WEEKLY DATA:", week); // ✅ temporary debug
+  return week;
+};
+
+const weeklyChartData = buildMonSunWeekData(historySessions);
 
   // ========================================
   // Effects
@@ -153,6 +220,38 @@ useEffect(() => {
   fetchTrainerStats();
 }, [user?.id, user?.is_trainer]);
 
+// Fetch member workout history (completed sessions)
+useEffect(() => {
+  const fetchHistory = async () => {
+    if (!user || user.is_trainer) {
+      setHistoryLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/history/`, {
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        setHistorySessions([]);
+        return;
+      }
+
+      const data = await res.json();
+      // backend returns { total, sessions }
+      setHistorySessions(Array.isArray(data.sessions) ? data.sessions : []);
+    } catch (e) {
+      console.error('Error fetching workout history:', e);
+      setHistorySessions([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  fetchHistory();
+}, [user]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -209,7 +308,7 @@ useEffect(() => {
   const initials = `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase() 
     || user.username[0].toUpperCase();
 
-  // Dynamic trainer stats with live program count
+  // Dynamic trainer stats with live program countt
   const TRAINER_STATS: StatCard[] = [
     {
       icon: '📊',
@@ -241,7 +340,86 @@ useEffect(() => {
     },
   ];
 
-  const stats = user.is_trainer ? TRAINER_STATS : USER_STATS;
+    // Compute member stats from history
+  const totalWorkouts = historySessions.length;
+
+  const totalMinutes = historySessions.reduce((sum, s) => {
+    const m = typeof s.duration_minutes === 'number' ? s.duration_minutes : 0;
+    return sum + m;
+  }, 0);
+
+  // Simple streak: consecutive days including today OR yesterday
+  const computeStreak = (sessions: WorkoutHistorySession[]) => {
+    if (!sessions.length) return 0;
+
+    const dates = Array.from(new Set(sessions.map(s => s.date))).sort().reverse();
+
+    const today = new Date();
+    const toISO = (d: Date) => d.toISOString().slice(0, 10);
+
+    const todayISO = toISO(today);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayISO = toISO(yesterday);
+
+    let current: Date | null =
+      dates[0] === todayISO ? today : (dates[0] === yesterdayISO ? yesterday : null);
+    if (!current) return 0;
+
+    let streak = 0;
+    for (const d of dates) {
+      if (!current) break;
+
+      const currentISO = toISO(current);
+
+      if (d === currentISO) {
+        streak++;
+
+        const prev: Date = new Date(current);
+        prev.setDate(current.getDate() - 1);
+
+        current = prev;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  const currentStreak = computeStreak(historySessions);
+
+  const MEMBER_STATS: StatCard[] = [
+    {
+      icon: '📊',
+      iconColor: 'blue',
+      label: 'Total Workouts',
+      value: historyLoading ? '...' : totalWorkouts,
+      subtext: totalWorkouts === 0 ? 'Start your first workout today!' : 'Nice work—keep going!',
+    },
+    {
+      icon: '🔥',
+      iconColor: 'green',
+      label: 'Current Streak',
+      value: historyLoading ? '...' : `${currentStreak} days`,
+      subtext: currentStreak === 0 ? 'Build consistency!' : 'Momentum looks good!',
+    },
+    {
+      icon: '⏱️',
+      iconColor: 'purple',
+      label: 'Total Time',
+      value: historyLoading ? '...' : `${totalMinutes} min`,
+      subtext: 'Every minute counts',
+    },
+    {
+      icon: '🏆',
+      iconColor: 'orange',
+      label: 'Achievements',
+      value: 0,
+      subtext: 'Unlock your first badge!',
+    },
+  ];
+
+  const stats = user.is_trainer ? TRAINER_STATS : MEMBER_STATS;
 
   // ========================================
   // Render
@@ -364,6 +542,44 @@ useEffect(() => {
             </div>
           ))}
         </section>
+        {/* Weekly Workout Graph (Members only) */}
+{!user.is_trainer && (
+  <section style={{ marginTop: '24px' }}>
+    <h2 className="section-title">This Week</h2>
+
+    <div
+      style={{
+        background: '#fff',
+        border: '1px solid #e8e8e8',
+        borderRadius: '12px',
+        padding: '16px',
+        height: '260px',
+      }}
+    >
+      {historyLoading ? (
+        <p>Loading chart...</p>
+      ) : (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={weeklyChartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="day" tickMargin={8} />
+            <YAxis tickMargin={8}
+              label={{ value: "Minutes", angle: -90, position: "insideLeft" }}
+              domain={[0, 'auto']}
+            />
+            <Tooltip />
+            <Line
+              type="monotone"
+              dataKey="hours"
+              strokeWidth={3}
+              dot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  </section>
+)}
 
         {/* Quick Actions */}
         <section className="quick-actions">

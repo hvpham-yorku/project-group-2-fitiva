@@ -410,4 +410,13 @@ export const api = {
   delete: <T = unknown>(endpoint: string): Promise<T> => 
     fetchAPI<T>(endpoint, { method: 'DELETE' }),
 };
+export const sessionAPI = {
+  getWorkoutHistory: async (start?: string, end?: string) => {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
 
+    const qs = params.toString();
+    return fetchAPI(`/api/sessions/history/${qs ? `?${qs}` : ""}`, { method: "GET" });
+  },
+};
