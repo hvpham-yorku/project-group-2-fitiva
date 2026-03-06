@@ -63,6 +63,7 @@ urlpatterns = [
     path('schedule/deactivate/', views.deactivate_schedule, name='deactivate-schedule'),
     path('schedule/remove-program/<int:program_id>/', views.remove_program_from_schedule, name='remove-program-from-schedule'),
     path('schedule/check-program/<int:program_id>/', views.check_program_in_schedule, name='check-program-in-schedule'),
+    path('schedule/lock-adjustments/', views.schedule_adjustment_lock, name='schedule-adjustment-lock'),
 
     # US2.3 — Two-step adjust: preview (no save) → user accepts → apply (saves)
     path('schedule/regenerate/preview/', views.regenerate_schedule_preview, name='regenerate-schedule-preview'),

@@ -57,9 +57,7 @@ User = get_user_model()
 DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
+# Helper functions
 
 def format_validation_errors(validation_error):
     """Format DRF ValidationError for consistent error responses."""
@@ -114,6 +112,40 @@ def _find_next_workout_day(weekly_schedule, pain_day):
             return candidate_day, next_date.isoformat()
 
     return None, None
+
+
+def _get_next_cycle_window(schedule, today=None):
+    """Finds the date range for the next cycle."""
+    today = today or timezone.localdate()
+
+    if today < schedule.start_date:
+        cycle_start = schedule.start_date
+    else:
+        days_since_start = (today - schedule.start_date).days
+        next_cycle_offset = ((days_since_start // 7) + 1) * 7
+        cycle_start = schedule.start_date + timedelta(days=next_cycle_offset)
+
+    cycle_end = cycle_start + timedelta(days=6)
+    return cycle_start, cycle_end
+
+
+def _is_adjustment_lock_active(schedule, today=None, clear_if_expired=True):
+    """Checks if the schedule is locked right now."""
+    today = today or timezone.localdate()
+    locked_until = getattr(schedule, 'adjustments_locked_until', None)
+
+    if not locked_until:
+        return False
+
+    if locked_until >= today:
+        return True
+
+    if clear_if_expired:
+        schedule.adjustments_locked_until = None
+        schedule.adjustment_lock_note = ''
+        schedule.save(update_fields=['adjustments_locked_until', 'adjustment_lock_note', 'updated_at'])
+
+    return False
 
 
 def _build_recovery_options(pain_day, next_workout_day, next_workout_date, current_duration=45):
@@ -195,9 +227,7 @@ def _build_recovery_options(pain_day, next_workout_day, next_workout_date, curre
     return options
 
 
-# ============================================================================
 # AUTHENTICATION VIEWS
-# ============================================================================
 
 @ensure_csrf_cookie
 @require_GET
@@ -248,9 +278,7 @@ def me(request):
     return Response({"authenticated": True, "user": UserSerializer(request.user).data})
 
 
-# ============================================================================
 # USER PROFILE VIEWS
-# ============================================================================
 
 @api_view(["POST"])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -294,9 +322,7 @@ def profile_me_view(request):
         return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ============================================================================
 # PUBLIC PROFILE VIEWS
-# ============================================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -359,9 +385,7 @@ def get_trainer_programs(request, user_id):
     )
 
 
-# ============================================================================
 # TRAINER PROFILE VIEWS
-# ============================================================================
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
@@ -384,9 +408,7 @@ def update_trainer_profile(request):
         return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ============================================================================
 # WORKOUT VIEWSETS
-# ============================================================================
 
 class WorkoutProgramViewSet(viewsets.ModelViewSet):
     serializer_class = WorkoutPlanSerializer
@@ -526,9 +548,7 @@ def exercise_template_detail(request, template_id):
         return Response({'error': 'Exercise template not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
-# ============================================================================
 # PASSWORD RESET VIEWS
-# ============================================================================
 
 def build_reset_url(request, uid, token):
     base = os.environ.get("FRONTEND_BASE_URL")
@@ -566,9 +586,7 @@ def password_reset(request):
     return Response({"ok": True})
 
 
-# ============================================================================
 # SCHEDULE VIEWS
-# ============================================================================
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -708,6 +726,7 @@ def check_program_in_schedule(request, program_id):
 def get_active_schedule(request):
     try:
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+        _is_adjustment_lock_active(schedule)
         serializer = UserScheduleSerializer(schedule)
         calendar_events = []
         start_date = schedule.start_date
@@ -1087,9 +1106,7 @@ def deactivate_schedule(request):
     )
 
 
-# ============================================================================
 # US2.3 — SHARED ANALYSIS HELPER
-# ============================================================================
 
 def _analyze_feedback(user):
     """
@@ -1250,33 +1267,47 @@ def _analyze_feedback(user):
     return schedule, suggestion, None
 
 
-# ============================================================================
 # US2.3 — PREVIEW: analyze feedback, return suggestion WITHOUT saving
-# ============================================================================
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
 @permission_classes([IsAuthenticated])
 def regenerate_schedule_preview(request):
-    """
-    Analyze last 7 days of feedback and return a suggestion.
-    Does NOT modify the schedule.
-    """
+    """Looks at recent feedback and returns a preview only."""
+    try:
+        active_schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if _is_adjustment_lock_active(active_schedule):
+        return Response({
+            "message": (
+                f"Your current plan is locked for the next cycle until "
+                f"{active_schedule.adjustments_locked_until.isoformat()}. "
+                f"Recommended adjustments are paused."
+            ),
+            "regenerated": False,
+            "locked": True,
+            "locked_until": active_schedule.adjustments_locked_until.isoformat(),
+            "lock_note": active_schedule.adjustment_lock_note,
+        }, status=status.HTTP_200_OK)
+
     schedule, suggestion, error = _analyze_feedback(request.user)
     if error:
         return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
+
     if suggestion is None:
         return Response({
             "message": "No recent feedback found. Complete workouts and rate them to enable auto-adjustment.",
             "regenerated": False,
         }, status=status.HTTP_200_OK)
+
     response_data = {k: v for k, v in suggestion.items() if not k.startswith('_')}
+    response_data["regenerated"] = True
     return Response(response_data, status=status.HTTP_200_OK)
 
 
-# ============================================================================
 # US2.3 — APPLY: user accepted the suggestion, now save it
-# ============================================================================
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -1292,7 +1323,19 @@ def regenerate_schedule_apply(request):
     if suggestion is None:
         return Response({"message": "No recent feedback found.", "regenerated": False}, status=status.HTTP_200_OK)
 
-    # Pain suggestions must go through apply_recovery_option instead
+    if _is_adjustment_lock_active(schedule):
+        return Response(
+            {
+                "error": (
+                    f"Your current plan is locked for the next cycle until "
+                    f"{schedule.adjustments_locked_until.isoformat()}. "
+                    f"Unlock it before applying recommended adjustments."
+                )
+            },
+            status=status.HTTP_423_LOCKED,
+        )
+
+    # Pain suggestions go through apply_recovery_option instead
     if suggestion.get('adjustment') == 'pain':
         return Response(
             {"error": "Pain recovery requires choosing an option via /schedule/apply-recovery-option/"},
@@ -1327,9 +1370,7 @@ def regenerate_schedule_apply(request):
     return Response(response_data, status=status.HTTP_200_OK)
 
 
-# ============================================================================
 # PAIN RECOVERY — Apply a specific user-chosen option
-# ============================================================================
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -1349,6 +1390,18 @@ def apply_recovery_option(request):
         schedule = UserSchedule.objects.get(user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
         return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if _is_adjustment_lock_active(schedule):
+        return Response(
+            {
+                "error": (
+                    f"Your current plan is locked for the next cycle until "
+                    f"{schedule.adjustments_locked_until.isoformat()}. "
+                    f"Unlock it before applying recovery adjustments."
+                )
+            },
+            status=status.HTTP_423_LOCKED,
+        )
 
     option_id      = request.data.get('option_id')
     affected_day   = request.data.get('affected_day')
@@ -1427,9 +1480,73 @@ def apply_recovery_option(request):
     }, status=status.HTTP_200_OK)
 
 
-# ============================================================================
 # REVERT schedule to its original (pre-adjustment) state
-# ============================================================================
+
+@api_view(['POST', 'DELETE'])
+@authentication_classes([CsrfExemptSessionAuthentication])
+@permission_classes([IsAuthenticated])
+def schedule_adjustment_lock(request):
+    """Locks or unlocks schedule adjustments for the next cycle."""
+    try:
+        schedule = UserSchedule.objects.get(user=request.user, is_active=True)
+    except UserSchedule.DoesNotExist:
+        return Response({"error": "No active schedule found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'DELETE':
+        if not schedule.adjustments_locked_until:
+            return Response(
+                {
+                    "message": "No active adjustment lock found.",
+                    "locked": False,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        schedule.adjustments_locked_until = None
+        schedule.adjustment_lock_note = ''
+        schedule.save(update_fields=['adjustments_locked_until', 'adjustment_lock_note', 'updated_at'])
+
+        return Response(
+            {
+                "message": "Plan lock removed. Recommended adjustments can be suggested again.",
+                "locked": False,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    if _is_adjustment_lock_active(schedule):
+        return Response(
+            {
+                "message": f"Your plan is already locked through {schedule.adjustments_locked_until.isoformat()}.",
+                "locked": True,
+                "locked_until": schedule.adjustments_locked_until.isoformat(),
+                "lock_note": schedule.adjustment_lock_note,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    cycle_start, cycle_end = _get_next_cycle_window(schedule)
+    note = (request.data.get('note') or 'Current workout plan locked for the next cycle.').strip()
+
+    schedule.adjustments_locked_until = cycle_end
+    schedule.adjustment_lock_note = note[:255]
+    schedule.save(update_fields=['adjustments_locked_until', 'adjustment_lock_note', 'updated_at'])
+
+    return Response(
+        {
+            "message": (
+                f"Plan locked for the next cycle, from "
+                f"{cycle_start.isoformat()} to {cycle_end.isoformat()}."
+            ),
+            "reason": "Recommended adjustments will stay off during that cycle unless you unlock the plan.",
+            "locked": True,
+            "lock_starts_on": cycle_start.isoformat(),
+            "locked_until": cycle_end.isoformat(),
+            "lock_note": schedule.adjustment_lock_note,
+        },
+        status=status.HTTP_200_OK,
+    )
+
 
 @api_view(['POST'])
 @authentication_classes([CsrfExemptSessionAuthentication])
@@ -1465,9 +1582,7 @@ def revert_schedule(request):
     }, status=status.HTTP_200_OK)
 
 
-# ============================================================================
 # TRAINER PROGRAM FEEDBACK
-# ============================================================================
 
 @api_view(['GET'])
 @authentication_classes([CsrfExemptSessionAuthentication])

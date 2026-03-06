@@ -3,9 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 
 
-# ============================================================================
-# SHARED CHOICES
-# ============================================================================
+# Shared choices
 
 EXPERIENCE_CHOICES = [
     ('beginner', 'Beginner'),
@@ -29,12 +27,10 @@ DIFFICULTY_RATING_CHOICES = [
 ]
 
 
-# ============================================================================
-# MODELS
-# ============================================================================
+# Models
 
 class CustomUser(AbstractUser):
-    """Extended user model for regular users and trainers."""
+    """Basic user model for the app."""
     is_trainer = models.BooleanField(default=False)
     email = models.EmailField(unique=True)
 
@@ -46,7 +42,7 @@ class CustomUser(AbstractUser):
 
 
 class UserProfile(models.Model):
-    """User fitness profile with goals and preferences."""
+    """Stores the user profile info."""
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='profile')
     age = models.IntegerField(null=True, blank=True)
     experience_level = models.CharField(max_length=20, choices=EXPERIENCE_CHOICES, default='beginner')
@@ -66,7 +62,7 @@ class UserProfile(models.Model):
 
 
 class TrainerProfile(models.Model):
-    """Extended profile for fitness trainers with credentials and specialties."""
+    """Extra info for trainer accounts."""
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='trainer_profile')
     bio = models.TextField(max_length=500, blank=True)
     years_of_experience = models.IntegerField(default=0)
@@ -95,7 +91,7 @@ class TrainerProfile(models.Model):
 
 
 class WorkoutPlan(models.Model):
-    """Workout plan created by trainers or system defaults."""
+    """Workout plan made by a trainer or the system."""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     focus = models.JSONField(
@@ -379,6 +375,19 @@ class UserSchedule(models.Model):
             "Per-day focus overrides. "
             "e.g. {'tuesday': 'mobility'}. Set by the lighter_focus recovery option."
         ),
+    )
+
+    adjustments_locked_until = models.DateField(
+        null=True,
+        blank=True,
+        help_text="If set, AI adjustment suggestions are blocked until the end of this date.",
+    )
+
+    adjustment_lock_note = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Optional note saved when the user locks the current plan for the next cycle.",
     )
 
     is_active = models.BooleanField(

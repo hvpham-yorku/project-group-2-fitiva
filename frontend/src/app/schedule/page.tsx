@@ -46,6 +46,11 @@ interface Schedule {
   created_at: string;
   is_adjusted?: boolean;
   original_weekly_schedule?: { [key: string]: number[] | string };
+  duration_overrides?: Record<string, number>;
+  focus_overrides?: Record<string, string>;
+  adjustments_locked_until?: string | null;
+  adjustment_lock_note?: string;
+  is_adjustment_locked?: boolean;
 }
 
 interface ScheduleResponse {
@@ -61,7 +66,7 @@ interface NextWeekChange {
   reason?: string;
 }
 
-// ── NEW: Rich recovery option returned from backend ────────────────────────
+// Recovery options from the backend
 export interface RecoveryOption {
   id: 'rest_next' | 'shorter_workout' | 'lighter_focus' | 'rest_same_day' | 'keep_going';
   label: string;
@@ -108,11 +113,7 @@ const ADJUSTMENT_META: Record<string, { emoji: string; label: string; color: str
   none:      { emoji: '✅', label: 'No Changes Needed',    color: '#6b7280' },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER: given the weekly_schedule and a pain day, find the CORRECT next
-// workout day — not a hardcoded +2 offset.
-// This mirrors the fix that also needs to happen in the backend.
-// ─────────────────────────────────────────────────────────────────────────────
+// Small helper to find the next workout day from the weekly schedule
 export function findNextWorkoutDay(
   weeklySchedule: { [key: string]: number[] | string },
   painDay: string
@@ -144,7 +145,7 @@ function _isWorkoutDayInSchedule(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPER: build the recovery options array on the frontend as a fallback
+// Fallback for recovery options on the frontend
 // (backend should return these; this is a safety net / preview).
 // ─────────────────────────────────────────────────────────────────────────────
 export function buildRecoveryOptions(
@@ -249,6 +250,8 @@ const SchedulePage = () => {
   // ← NEW: which recovery option the user has selected
   const [selectedRecoveryOption, setSelectedRecoveryOption] = useState<RecoveryOption | null>(null);
   const [applyingRecovery, setApplyingRecovery] = useState(false);
+  const [lockingPlan, setLockingPlan] = useState(false);
+  const [unlockingPlan, setUnlockingPlan] = useState(false);
 
   const [nextWeekChanges, setNextWeekChanges] = useState<NextWeekChange[] | null>(null);
   const [showNextWeekBanner, setShowNextWeekBanner] = useState(false);
@@ -492,7 +495,14 @@ const SchedulePage = () => {
         }
       );
       const data = await res.json();
-      if (!res.ok) { showError(data.error || 'Failed to apply option'); return; }
+      if (!res.ok) {
+        if (res.status === 423) {
+          showInfo(data.error || 'Your current plan is locked for the next cycle.');
+        } else {
+          showError(data.error || 'Failed to apply option');
+        }
+        return;
+      }
 
       if (option.id === 'keep_going') {
         showInfo('Got it — schedule unchanged. Keep an eye on that pain! 💙');
@@ -532,7 +542,14 @@ const SchedulePage = () => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/schedule/regenerate/apply/`, { method: 'POST', credentials: 'include' });
       const data = await res.json();
-      if (!res.ok) { showError(data.error || 'Failed to apply changes'); return; }
+      if (!res.ok) {
+        if (res.status === 423) {
+          showInfo(data.error || 'Your current plan is locked for the next cycle.');
+        } else {
+          showError(data.error || 'Failed to apply changes');
+        }
+        return;
+      }
       showSuccess(`✅ Schedule updated! ${data.reason}`);
       setShowSuggestionModal(false); setSuggestion(null);
       await fetchSchedule();
@@ -540,15 +557,93 @@ const SchedulePage = () => {
     finally { setApplyingRegen(false); }
   };
 
+  const handleLockPlanForNextCycle = async () => {
+    if (!scheduleData?.schedule) return;
+
+    setLockingPlan(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/lock-adjustments/`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            note: 'User locked the current workout plan for the next cycle after reviewing a recommended adjustment.',
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || data.message || 'Failed to lock the current plan');
+        return;
+      }
+
+      showSuccess(data.message || 'Plan locked for the next cycle.');
+      setShowSuggestionModal(false);
+      setSuggestion(null);
+      setSelectedRecoveryOption(null);
+      await fetchSchedule();
+    } catch {
+      showError('Could not lock the current plan right now.');
+    } finally {
+      setLockingPlan(false);
+    }
+  };
+
+  const handleUnlockPlan = async () => {
+    if (!scheduleData?.schedule) return;
+
+    setUnlockingPlan(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/lock-adjustments/`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || data.message || 'Failed to unlock the plan');
+        return;
+      }
+
+      showSuccess(data.message || 'Plan lock removed.');
+      await fetchSchedule();
+    } catch {
+      showError('Could not unlock the plan.');
+    } finally {
+      setUnlockingPlan(false);
+    }
+  };
+
   const handleDismissSuggestion = () => {
     setShowSuggestionModal(false);
     setSuggestion(null);
     setSelectedRecoveryOption(null);
-    showInfo('Suggestion dismissed — your schedule was not changed.');
+    showInfo(
+      'Adjustment rejected. Your current weekly plan stays unchanged, and Fitiva can suggest new changes after future feedback.'
+    );
   };
 
   const handleRegenerateSchedule = async () => {
     if (!scheduleData?.schedule) return;
+
+    if (scheduleData?.schedule?.is_adjustment_locked) {
+      const lockedUntil = scheduleData.schedule.adjustments_locked_until;
+      showInfo(
+        lockedUntil
+          ? `Your current plan is locked through ${parseLocalDate(lockedUntil).toLocaleDateString()}. Unlock it before requesting new adjustments.`
+          : 'Your current plan is locked for the next cycle.'
+      );
+      return;
+    }
+
     setRegenerating(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/schedule/regenerate/preview/`, { method: 'POST', credentials: 'include' });
@@ -665,6 +760,14 @@ const SchedulePage = () => {
   );
 
   const { schedule, calendar_events } = scheduleData;
+  const isAdjustmentLocked = Boolean(
+    schedule.is_adjustment_locked && schedule.adjustments_locked_until
+  );
+
+  const lockedUntilLabel = schedule.adjustments_locked_until
+    ? parseLocalDate(schedule.adjustments_locked_until).toLocaleDateString()
+    : '';
+
   const weeks = buildWeeksForMonthOffset(calendar_events, schedule.start_date, monthOffset);
   const allFocuses = schedule.program_list ? [...new Set(schedule.program_list.flatMap((p) => p.focus))] : [];
   const suggestionMeta = suggestion ? (ADJUSTMENT_META[suggestion.adjustment] ?? ADJUSTMENT_META.none) : null;
@@ -701,6 +804,28 @@ const SchedulePage = () => {
             </div>
           )}
 
+          {isAdjustmentLocked && (
+            <div className="adjustment-lock-banner">
+              <div className="adjustment-lock-copy">
+                <h4>🔒 Plan locked for next cycle</h4>
+                <p>
+                  Your current weekly plan will stay unchanged until{' '}
+                  <strong>{lockedUntilLabel}</strong>.{' '}
+                  {schedule.adjustment_lock_note ||
+                    'Recommended adjustments are paused while this lock is active.'}
+                </p>
+              </div>
+
+              <button
+                className="btn-lock-plan"
+                onClick={handleUnlockPlan}
+                disabled={unlockingPlan}
+              >
+                {unlockingPlan ? 'Unlocking...' : 'Unlock Plan'}
+              </button>
+            </div>
+          )}
+
           {/* Program Info Card */}
           <div className="program-info-card">
             <div className="program-info-header">
@@ -713,8 +838,21 @@ const SchedulePage = () => {
                 )}
               </div>
               <div className="schedule-header-actions">
-                <button className="btn-regenerate" onClick={handleRegenerateSchedule} disabled={regenerating} title="Analyzes your last 7 days of feedback and suggests adjustments">
-                  {regenerating ? '⏳ Analyzing...' : '🔄 Adjust Schedule'}
+                <button
+                  className="btn-regenerate"
+                  onClick={handleRegenerateSchedule}
+                  disabled={regenerating || isAdjustmentLocked}
+                  title={
+                    isAdjustmentLocked
+                      ? `Plan locked until ${lockedUntilLabel}`
+                      : 'Analyzes your last 7 days of feedback and suggests adjustments'
+                  }
+                >
+                  {isAdjustmentLocked
+                    ? '🔒 Adjustments Locked'
+                    : regenerating
+                      ? '⏳ Analyzing...'
+                      : '🔄 Adjust Schedule'}
                 </button>
                 {schedule.is_adjusted && (
                   <button className="btn-regenerate" onClick={() => setShowRevertConfirm(true)} style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '2px solid var(--border-medium)' }} title="Revert to your original default schedule">
@@ -1038,19 +1176,57 @@ const SchedulePage = () => {
                     </div>
                   )}
 
+                  <div className="suggestion-impact-note">
+                    Rejecting this suggestion keeps your current weekly plan unchanged.
+                    Locking the plan keeps it unchanged for the next cycle and pauses
+                    new adjustment suggestions until the lock expires.
+                  </div>
+
                   {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button onClick={handleDismissSuggestion} style={{ flex: 1, padding: '0.7rem', borderRadius: '8px', border: '2px solid var(--border-medium)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
-                      Dismiss
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handleDismissSuggestion}
+                      style={{
+                        flex: 1,
+                        minWidth: '150px',
+                        padding: '0.7rem',
+                        borderRadius: '8px',
+                        border: '2px solid var(--border-medium)',
+                        background: 'transparent',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      Reject
                     </button>
+
+                    {!isAdjustmentLocked && (
+                      <button
+                        onClick={handleLockPlanForNextCycle}
+                        disabled={lockingPlan}
+                        className="btn-lock-plan"
+                        style={{ flex: 1, minWidth: '170px' }}
+                      >
+                        {lockingPlan ? '🔒 Locking...' : '🔒 Lock Next Cycle'}
+                      </button>
+                    )}
+
                     <button
                       onClick={handleAcceptSuggestion}
                       disabled={applyingRegen || applyingRecovery || (isPainSuggestion && !selectedRecoveryOption)}
                       style={{
-                        flex: 2, padding: '0.7rem', borderRadius: '8px', border: 'none',
+                        flex: 2,
+                        minWidth: '220px',
+                        padding: '0.7rem',
+                        borderRadius: '8px',
+                        border: 'none',
                         background: (isPainSuggestion && !selectedRecoveryOption) ? 'var(--border-medium)' : suggestionMeta.color,
-                        color: '#fff', cursor: (applyingRegen || applyingRecovery || (isPainSuggestion && !selectedRecoveryOption)) ? 'not-allowed' : 'pointer',
-                        fontWeight: 700, fontSize: '0.95rem',
+                        color: '#fff',
+                        cursor: (applyingRegen || applyingRecovery || (isPainSuggestion && !selectedRecoveryOption)) ? 'not-allowed' : 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
                         opacity: (applyingRegen || applyingRecovery) ? 0.7 : 1,
                         transition: 'background 0.2s',
                       }}
