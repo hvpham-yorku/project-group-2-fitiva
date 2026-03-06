@@ -1101,3 +1101,35 @@
   color: var(--text-secondary);
 }
 
+
+/* US2.3: button row in program info header */
+.schedule-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* US2.3: Adjust Schedule button */
+.btn-regenerate {
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: 2px solid #EF3E36;
+  color: #EF3E36;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-regenerate:hover:not(:disabled) {
+  background: #EF3E36;
+  color: white;
+}
+
+.btn-regenerate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
