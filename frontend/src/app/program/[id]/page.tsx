@@ -46,6 +46,9 @@ interface Program {
   sections: ProgramSection[];
 }
 
+// Bug fix #2: all days for rest day picker
+const ALL_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
 const ProgramDetailPage = () => {
   const params = useParams();
   const router = useRouter();
@@ -66,6 +69,11 @@ const ProgramDetailPage = () => {
   // Confirm modal state
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
+  // Bug fix #2: rest day picker state (replaces hardcoded rest_days: ['sunday'])
+  const [showRestDayPicker, setShowRestDayPicker] = useState(false);
+  const [selectedRestDays, setSelectedRestDays] = useState<string[]>(['sunday']);
+  const [addingToSchedule, setAddingToSchedule] = useState(false);
+
   useEffect(() => {
     fetchProgramDetail();
     checkIfInSchedule();
@@ -75,11 +83,8 @@ const ProgramDetailPage = () => {
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/programs/${programId}/`,
-        {
-          credentials: 'include',
-        }
+        { credentials: 'include' }
       );
-
       if (response.ok) {
         const data = await response.json();
         setProgram(data);
@@ -98,11 +103,8 @@ const ProgramDetailPage = () => {
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/active/`,
-        {
-          credentials: 'include',
-        }
+        { credentials: 'include' }
       );
-
       if (response.ok) {
         const data = await response.json();
         if (data.schedule && data.schedule.programs) {
@@ -132,42 +134,38 @@ const ProgramDetailPage = () => {
     return `${mins} min ${secs} sec`;
   };
 
-  // Notification helpers
-  const showSuccess = (message: string) => {
-    setNotification({ type: 'success', message });
+  const showSuccess = (message: string) => setNotification({ type: 'success', message });
+  const showError = (message: string) => setNotification({ type: 'error', message });
+  const showInfo = (message: string) => setNotification({ type: 'info', message });
+
+  // Bug fix #2: toggle a day in/out of rest days
+  const toggleRestDay = (day: string) => {
+    setSelectedRestDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
   };
 
-  const showError = (message: string) => {
-    setNotification({ type: 'error', message });
-  };
-
-  const showInfo = (message: string) => {
-    setNotification({ type: 'info', message });
-  };
-
-  // Add to schedule
-  const handleAddToSchedule = async () => {
+  // Bug fix #2: sends user-selected rest_days (was hardcoded ['sunday'])
+  const handleConfirmAddToSchedule = async () => {
     if (!program) return;
-
+    setAddingToSchedule(true);
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/generate/`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
             program_id: program.id,
-            rest_days: ['sunday']
-          })
+            rest_days: selectedRestDays,
+          }),
         }
       );
-      
       if (response.ok) {
         showSuccess('Program added to your schedule!');
         setIsInSchedule(true);
+        setShowRestDayPicker(false);
       } else {
         const errorData = await response.json();
         showError(errorData.error || 'Failed to add to schedule');
@@ -175,22 +173,18 @@ const ProgramDetailPage = () => {
     } catch (error) {
       console.error('Error adding to schedule:', error);
       showError('Error adding to schedule. Please try again.');
+    } finally {
+      setAddingToSchedule(false);
     }
   };
 
-  // Remove from schedule
   const handleRemoveFromSchedule = async () => {
     if (!program) return;
-
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/remove-program/${program.id}/`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
+        { method: 'DELETE', credentials: 'include' }
       );
-
       if (response.ok) {
         showSuccess('Program removed from schedule');
         setIsInSchedule(false);
@@ -203,7 +197,7 @@ const ProgramDetailPage = () => {
       showError('Error removing from schedule. Please try again.');
     }
   };
-  
+
   const getFocusIcon = (focus: string) => {
     const icons: { [key: string]: string } = {
       strength: '💪',
@@ -216,8 +210,7 @@ const ProgramDetailPage = () => {
 
   const getTotalExercises = () => {
     return program?.sections?.reduce(
-      (sum, section) => sum + (section.exercises?.length || 0),
-      0
+      (sum, section) => sum + (section.exercises?.length || 0), 0
     ) || 0;
   };
 
@@ -248,17 +241,13 @@ const ProgramDetailPage = () => {
       <ProtectedRoute>
         <div className="program-detail-container">
           <div className="header">
-            <button className="back-button" onClick={() => router.back()}>
-              ← Back
-            </button>
+            <button className="back-button" onClick={() => router.back()}>← Back</button>
             <h1>Program Details</h1>
           </div>
           <div className="content">
             <div className="error-state">
               <h3>⚠️ {error || 'Program not found'}</h3>
-              <button className="btn-primary" onClick={() => router.back()}>
-                Go Back
-              </button>
+              <button className="btn-primary" onClick={() => router.back()}>Go Back</button>
             </div>
           </div>
         </div>
@@ -271,16 +260,12 @@ const ProgramDetailPage = () => {
   return (
     <ProtectedRoute>
       <div className="program-detail-container">
-        {/* Header */}
         <div className="header">
-          <button className="back-button" onClick={() => router.back()}>
-            ← Back
-          </button>
+          <button className="back-button" onClick={() => router.back()}>← Back</button>
           <h1>Program Details</h1>
         </div>
 
         <div className="content">
-          {/* Program Overview Card */}
           <div className="overview-card">
             <div className="overview-header">
               <div className="title-section">
@@ -294,12 +279,8 @@ const ProgramDetailPage = () => {
                 </div>
               </div>
               <div className="header-badges">
-                {isOwnProgram && (
-                  <span className="owner-badge">Your Program</span>
-                )}
-                {isInSchedule && (
-                  <span className="schedule-badge">In your schedule</span>
-                )}
+                {isOwnProgram && <span className="owner-badge">Your Program</span>}
+                {isInSchedule && <span className="schedule-badge">In your schedule</span>}
               </div>
             </div>
 
@@ -311,7 +292,6 @@ const ProgramDetailPage = () => {
               <strong>Created by:</strong> {program.trainer_name}
             </div>
 
-            {/* Quick Stats */}
             <div className="quick-stats">
               <div className="stat-item">
                 <span className="stat-icon">📊</span>
@@ -322,7 +302,6 @@ const ProgramDetailPage = () => {
                   </span>
                 </div>
               </div>
-
               <div className="stat-item">
                 <span className="stat-icon">📅</span>
                 <div className="stat-content">
@@ -330,7 +309,6 @@ const ProgramDetailPage = () => {
                   <span className="stat-value">{program.weekly_frequency}x per week</span>
                 </div>
               </div>
-
               <div className="stat-item">
                 <span className="stat-icon">⏱️</span>
                 <div className="stat-content">
@@ -338,7 +316,6 @@ const ProgramDetailPage = () => {
                   <span className="stat-value">{program.session_length} min</span>
                 </div>
               </div>
-
               <div className="stat-item">
                 <span className="stat-icon">🏋️</span>
                 <div className="stat-content">
@@ -346,7 +323,6 @@ const ProgramDetailPage = () => {
                   <span className="stat-value">{getTotalExercises()}</span>
                 </div>
               </div>
-
               <div className="stat-item">
                 <span className="stat-icon">📈</span>
                 <div className="stat-content">
@@ -356,7 +332,6 @@ const ProgramDetailPage = () => {
               </div>
             </div>
 
-            {/* Dates */}
             <div className="dates-info">
               <div className="date-item">
                 <span className="date-label">Created:</span>
@@ -368,26 +343,25 @@ const ProgramDetailPage = () => {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="action-buttons">
               {isInSchedule ? (
-                <button 
-                  className="btn-remove-schedule btn-large" 
+                <button
+                  className="btn-remove-schedule btn-large"
                   onClick={() => setShowRemoveConfirm(true)}
                 >
                   🗑️ Remove from My Schedule
                 </button>
               ) : (
-                <button 
-                  className="btn-primary btn-large" 
-                  onClick={handleAddToSchedule}
+                // Bug fix #2: opens rest day picker instead of hardcoding ['sunday']
+                <button
+                  className="btn-primary btn-large"
+                  onClick={() => setShowRestDayPicker(true)}
                 >
                   ⭐ Use This Program
                 </button>
               )}
-              
               {isOwnProgram && (
-                <button 
+                <button
                   className="btn-secondary btn-large"
                   onClick={() => router.push(`/edit-program/${program.id}`)}
                 >
@@ -411,26 +385,19 @@ const ProgramDetailPage = () => {
                       {section.exercises?.length || 0} exercises
                     </span>
                   </div>
-
                   {section.exercises && section.exercises.length > 0 ? (
                     <div className="exercises-list">
                       {section.exercises.map((exercise, exerciseIndex) => (
                         <div key={exercise.id} className="exercise-card">
                           <div className="exercise-header">
-                            <span className="exercise-number">
-                              {exerciseIndex + 1}
-                            </span>
+                            <span className="exercise-number">{exerciseIndex + 1}</span>
                             <h5 className="exercise-name">{exercise.name}</h5>
                           </div>
-
                           <div className="sets-table-container">
                             <table className="sets-table">
                               <thead>
                                 <tr>
-                                  <th>Set</th>
-                                  <th>Reps</th>
-                                  <th>Time</th>
-                                  <th>Rest</th>
+                                  <th>Set</th><th>Reps</th><th>Time</th><th>Rest</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -438,9 +405,7 @@ const ProgramDetailPage = () => {
                                   <tr key={set.id}>
                                     <td>{set.set_number}</td>
                                     <td>{set.reps || '-'}</td>
-                                    <td>
-                                      {set.time ? formatTime(set.time) : '-'}
-                                    </td>
+                                    <td>{set.time ? formatTime(set.time) : '-'}</td>
                                     <td>{formatTime(set.rest)}</td>
                                   </tr>
                                 ))}
@@ -463,7 +428,85 @@ const ProgramDetailPage = () => {
           </div>
         </div>
 
-        {/* Confirmation Modal for Remove */}
+        {/* Bug fix #2: Rest Day Picker Modal */}
+        {showRestDayPicker && (
+          <div className="modal-overlay" onClick={() => setShowRestDayPicker(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Choose Your Rest Days</h3>
+                <button className="modal-close" onClick={() => setShowRestDayPicker(false)}>✕</button>
+              </div>
+              <div className="modal-body">
+                <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
+                  Select the days you want to rest. Workouts will be scheduled on the remaining days
+                  based on this program&apos;s frequency ({program.weekly_frequency}x/week).
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginBottom: '1rem' }}>
+                  {ALL_DAYS.map((day) => {
+                    const active = selectedRestDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => toggleRestDay(day)}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          borderRadius: '20px',
+                          border: active ? '2px solid #EF3E36' : '2px solid var(--border-medium)',
+                          background: active ? 'linear-gradient(135deg, #EF3E36 0%, #FF9234 100%)' : 'var(--bg-tertiary)',
+                          color: active ? 'white' : 'var(--text-primary)',
+                          fontWeight: 600,
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {day.charAt(0).toUpperCase() + day.slice(1)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  {selectedRestDays.length === 0
+                    ? 'No rest days — all 7 days may be used for workouts.'
+                    : `Rest: ${selectedRestDays.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}`}
+                </p>
+              </div>
+              <div className="modal-actions">
+                <button
+                  onClick={() => setShowRestDayPicker(false)}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'transparent',
+                    border: '2px solid var(--border-medium)',
+                    borderRadius: '8px',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmAddToSchedule}
+                  disabled={addingToSchedule}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #EF3E36 0%, #FF9234 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontWeight: 700,
+                    cursor: addingToSchedule ? 'not-allowed' : 'pointer',
+                    opacity: addingToSchedule ? 0.6 : 1,
+                  }}
+                >
+                  {addingToSchedule ? 'Adding...' : '⭐ Add to Schedule'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showRemoveConfirm && (
           <ConfirmModal
             title="Remove from Schedule?"
@@ -479,7 +522,6 @@ const ProgramDetailPage = () => {
           />
         )}
 
-        {/* Notification Component */}
         {notification && (
           <Notification
             type={notification.type}
