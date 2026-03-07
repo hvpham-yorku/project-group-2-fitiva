@@ -10,8 +10,8 @@ User = get_user_model()
 
 
 class TrainingTrendsHistoryTests(APITestCase):
-    """Tests for the workout history API used by the dashboard to show completed sessions, total time, and to compute streak and trends."""
-
+    
+    # Create test user, other user, trainer, and a workout plan for session fixtures.
     def setUp(self):
         self.user = User.objects.create_user(
             username="testuser",
@@ -37,7 +37,7 @@ class TrainingTrendsHistoryTests(APITestCase):
             weekly_frequency=3,
             session_length=45,
         )
-
+    # Authenticated user gets 200 and a list of their completed sessions with total count.
     def test_authenticated_user_retrieves_completed_history(self):
         WorkoutSession.objects.create(
             user=self.user,
@@ -64,6 +64,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         self.assertEqual(len(data["sessions"]), 2)
         self.assertEqual(data["total"], 2)
 
+    # Response includes only completed sessions belonging to the authenticated user.
     def test_only_returns_workouts_for_logged_in_user(self):
         WorkoutSession.objects.create(
             user=self.user,
@@ -86,7 +87,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         self.assertEqual(data["total"], 1)
         self.assertEqual(len(data["sessions"]), 1)
         self.assertEqual(data["sessions"][0]["user"], self.user.id)
-
+    # Only sessions with status completed are returned; in-progress sessions are excluded.
     def test_only_completed_sessions_returned(self):
         WorkoutSession.objects.create(
             user=self.user,
@@ -152,6 +153,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         self.assertIn("date", session)
         self.assertIn("duration_minutes", session)
 
+    # The top-level total field equals the length of the sessions array.
     def test_total_equals_session_count(self):
         for i in range(3):
             WorkoutSession.objects.create(
@@ -198,7 +200,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         data = response.json()
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["sessions"][0]["date"], recent.isoformat())
-
+    # Query param end=YYYY-MM-DD returns only sessions on or before that date.
     def test_query_param_end_filters_correctly(self):
         old = date.today() - timedelta(days=10)
         recent = date.today() - timedelta(days=2)
@@ -217,7 +219,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         data = response.json()
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["sessions"][0]["date"], old.isoformat())
-
+    # Query params start and end together return only sessions within the date range.
     def test_query_params_start_and_end_together(self):
         d1 = date.today() - timedelta(days=8)
         d2 = date.today() - timedelta(days=5)
@@ -239,6 +241,7 @@ class TrainingTrendsHistoryTests(APITestCase):
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["sessions"][0]["date"], d2.isoformat())
 
+    # When a session is linked to a plan, the response includes plan_name from that plan.
     def test_plan_name_populated_when_session_has_plan(self):
         WorkoutSession.objects.create(
             user=self.user,
