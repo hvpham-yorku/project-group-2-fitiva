@@ -238,3 +238,19 @@ class TrainingTrendsHistoryTests(APITestCase):
         data = response.json()
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["sessions"][0]["date"], d2.isoformat())
+
+    def test_plan_name_populated_when_session_has_plan(self):
+        WorkoutSession.objects.create(
+            user=self.user,
+            plan=self.plan,
+            date=date.today(),
+            status="completed",
+            is_completed=True,
+            duration_minutes=40,
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/sessions/history/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(len(data["sessions"]), 1)
+        self.assertEqual(data["sessions"][0]["plan_name"], self.plan.name)
