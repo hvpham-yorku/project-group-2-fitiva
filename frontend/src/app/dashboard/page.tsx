@@ -218,7 +218,11 @@ export default function DashboardPage() {
     const checkProfile = async () => {
       try {
         const profile = await profileAPI.getProfile();
-        setHasCompletedProfile(!!profile.age);
+        const isComplete =
+        !!profile.experience_level &&
+        !!profile.training_location &&
+        (profile.fitness_focus?.length ?? 0) > 0;
+        setHasCompletedProfile(isComplete);
       } catch {
         setHasCompletedProfile(false);
       } finally {
