@@ -426,32 +426,34 @@ docker-compose up -d
 # Then run tests
 docker-compose exec backend python manage.py test api --verbosity=2
 ```
-7. Release & Repository Notes
-Commit strategy: frequent commits across team members throughout the iteration; avoided last-minute "mega commits".
 
-Tag: ITR2 branch created on March 6, 2026 from the latest main branch after all ITR2 PRs were merged.
+# 7. Release & Repository Notes
 
-Merged PRs for ITR2 (in order):
+**Commit strategy:** frequent commits across team members throughout the iteration; avoided last-minute "mega commits".
 
-PR #13: US 3.1 — complete/in-progress UI (Raha)
+**Tag:** ITR2 branch created on March 6, 2026 from the latest main branch after all ITR2 PRs were merged.
 
-PR #18: US 3.1 — test cases (Raha)
+## Merged PRs for ITR2 (in order):
 
-PR #19: US 3.4 — dashboard widgets + debug (Raha)
+**PR #13:** US 3.1 — complete/in-progress UI (Raha)
 
-PR #20: US 2.1 — post-workout feedback system (Ege)
+**PR #18: **US 3.1 — test cases (Raha)
 
-PR #21 / #24: US 3.3 — training trends analytics (Arshia)
+**PR #19: **US 3.4 — dashboard widgets + debug (Raha)
 
-PR #23 / #27: US 2.4 — program feedback dashboard + trends chart (Weiqin)
+**PR #20:** US 2.1 — post-workout feedback system (Ege)
 
-PR #25: US 2.3 — schedule adjustments + test cases (Shiah)
+**PR #21 / #24:** US 3.3 — training trends analytics (Arshia)
 
-PR #26: US 3.4 — additional test coverage (Raha)
+**PR #23 / #27:** US 2.4 — program feedback dashboard + trends chart (Weiqin)
 
-PR #28: ITR2 branch created (Ege)
+**PR #25:** US 2.3 — schedule adjustments + test cases (Shiah)
 
-Repo structure:
+**PR #26: **US 3.4 — additional test coverage (Raha)
+
+**PR #28: **ITR2 branch created (Ege)
+
+## Repo structure:
 
 frontend/ — frontend container
 
@@ -467,17 +469,18 @@ docs/ — planning documents (ITR0, ITR1, ITR2)
 
 GitHub Wiki — wiki + architecture sketch references
 
-8. Concern / Challenge
-US 2.5 not committed: Dawood's implementation of US 2.5 (Accept or Lock Recommended Adjustments) was not merged into the repository before the ITR2 branch was created. It was deferred to ITR3.
+# 8. Concern / Challenge
+**US 2.5 not committed: **Dawood's implementation of US 2.5 (Accept or Lock Recommended Adjustments) was not merged into the repository before the ITR2 branch was created. It was deferred to ITR3.
 
 All other team members delivered their assigned stories with no concerns about group dynamics or project direction.
 
-9. Next Steps (Preview for ITR3)
-Confirm status of US 2.5 and either complete or reschedule it
+# 9. Next Steps (Preview for ITR3)
+
+Confirm status of US 2.5 and finish it
 
 Identify additional ITR3 stories
 
-Plan improvements:
+**Plan improvements:**
 
 Expand test coverage for feedback and regeneration edge cases
 
