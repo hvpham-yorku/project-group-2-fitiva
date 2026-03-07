@@ -64,10 +64,14 @@ class DBRepository(BaseRepository):
         return serializer.data
 
     def get_user_profile(self, user_id):
-        return UserProfile.objects.filter(user_id=user_id).first()
+        profile = UserProfile.objects.get(user_id=user_id)
+        return UserProfileSerializer(profile).data  # return dict, not model
 
     def get_trainer_profile(self, user_id):
-        return TrainerProfile.objects.filter(user_id=user_id).first()
+        profile = TrainerProfile.objects.filter(user_id=user_id).first()
+        if not profile:
+            return None
+        return TrainerProfileSerializer(profile).data
 
     def get_public_profile(self, user_id, requesting_user_id=None):
         user = User.objects.filter(id=user_id).first()
@@ -169,7 +173,10 @@ class DBRepository(BaseRepository):
         return {"total": qs.count(), "exercises": ExerciseTemplateSerializer(qs, many=True).data}
 
     def get_exercise_template_by_id(self, template_id):
-        return ExerciseTemplate.objects.filter(id=template_id).first()
+        template = ExerciseTemplate.objects.filter(id=template_id).first()
+        if not template:
+            return None
+        return ExerciseTemplateSerializer(template).data
 
     # ── Sections / Exercises ──────────────────────────────────────────────
 
@@ -189,7 +196,7 @@ class DBRepository(BaseRepository):
         schedule = UserSchedule.objects.filter(user_id=user_id, is_active=True).first()
         if not schedule:
             return {"message": "No active schedule found", "schedule": None, "calendar_events": []}
-        return schedule  # return the model instance; views.py will serialize it
+        return schedule  # return raw model, views.py serializes this manually anyways
 
     def check_program_in_schedule(self, user_id, program_id):
         schedule = UserSchedule.objects.filter(user_id=user_id, is_active=True).first()
@@ -213,7 +220,12 @@ class DBRepository(BaseRepository):
         return {"total": qs.count(), "sessions": WorkoutSessionSerializer(qs, many=True).data}
 
     def get_workout_feedback(self, user_id, date_str):
+        from api.serializers import WorkoutFeedbackSerializer
+        
         session = WorkoutSession.objects.filter(user_id=user_id, date=date_str).first()
         if not session:
             return None
-        return WorkoutFeedback.objects.filter(session=session).first()
+        feedback = WorkoutFeedback.objects.filter(session=session).first()
+        if not feedback:
+            return None
+        return WorkoutFeedbackSerializer(feedback).data
