@@ -36,7 +36,10 @@ services:
       MYSQL_USER: fitiva_user
       MYSQL_PASSWORD: fitiva_pass
       DEBUG: "True"
-    command: bash -lc 'python manage.py migrate && python manage.py seed_exercises && python manage.py runserver 0.0.0.0:8000'
+    command: bash -lc 'python manage.py migrate && 
+      python manage.py seed_exercises &&
+      python manage.py loaddata seed_data.json --ignorenonexistent || true &&
+      python manage.py runserver 0.0.0.0:8000'
 
 
 

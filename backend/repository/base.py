@@ -21,6 +21,12 @@ class BaseRepository:
 
     # ── Profiles ──────────────────────────────────────────────────────────
 
+    def update_trainer_profile(self, user_id, data):
+        raise NotImplementedError
+
+    def update_user_profile(self, user_id, data):
+        raise NotImplementedError
+
     def get_user_profile(self, user_id):
         raise NotImplementedError
 
