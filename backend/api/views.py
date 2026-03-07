@@ -1,3 +1,7 @@
+# Switch between real DB and stub by changing this one line:
+from .repository import Repository; db = Repository()
+# from .stub_repository import StubRepository; db = StubRepository()
+
 import os
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
@@ -804,7 +808,7 @@ def update_schedule_end_date(request, schedule_id):
         schedule = UserSchedule.objects.get(id=schedule_id, user=request.user, is_active=True)
     except UserSchedule.DoesNotExist:
         return Response({"error": "Schedule not found"}, status=status.HTTP_404_NOT_FOUND)
-    new_end_date = request.data.get('end_date')
+    new_end_date = request.data.get('end_date') or request.data.get('enddate')
     if not new_end_date:
         return Response({"error": "end_date is required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
