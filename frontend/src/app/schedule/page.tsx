@@ -331,11 +331,42 @@ const SchedulePage = () => {
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/${scheduleData.schedule.id}/update-end-date/`,
-        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ end_date: newEndDate }) }
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ end_date: newEndDate }),
+        }
       );
-      if (response.ok) { showSuccess('End date updated!'); setEditingEndDate(false); fetchSchedule(); }
-      else { const err = await response.json(); showError(err.error || 'Failed to update end date'); }
-    } catch { showError('Error updating end date.'); }
+      if (response.ok) {
+        showSuccess('End date updated!');
+        setEditingEndDate(false);
+        // Immediately reflect the new end date in local state
+        setScheduleData(prev =>
+          prev && prev.schedule
+            ? { ...prev, schedule: { ...prev.schedule, end_date: newEndDate } }
+            : prev
+        );
+        // Refresh from server — if server returns end_date correctly this will also work
+        const refreshed = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/schedule/active`,
+          { credentials: 'include' }
+        );
+        if (refreshed.ok) {
+          const data = await refreshed.json();
+          // If the server didn't return end_date, keep our optimistic value
+          if (data.schedule && !data.schedule.end_date) {
+            data.schedule.end_date = newEndDate;
+          }
+          setScheduleData(data);
+        }
+      } else {
+        const err = await response.json();
+        showError(err.error || 'Failed to update end date');
+      }
+    } catch {
+      showError('Error updating end date.');
+    }
   };
 
   const fetchWorkoutForDate = async (dateStr: string, calendarSectionType?: string) => {
@@ -575,11 +606,15 @@ const SchedulePage = () => {
       });
       if (!res.ok) throw new Error('Failed to submit feedback');
       showSuccess(editingFeedback ? 'Feedback updated! ✏️' : 'Feedback submitted! 🙌');
-      setShowFeedbackForm(false); setShowWorkoutModal(false); resetFeedbackForm();
+      setShowFeedbackForm(false); 
+      setShowWorkoutModal(false);
+      const hadPain = feedbackPain;
+      const wasEditing = editingFeedback; 
+      resetFeedbackForm();
       await fetchSchedule();
       // Always trigger suggestion when pain is reported — pass the exact session
       // date so the modal shows the correct rated day, not "today"
-      if (!editingFeedback || feedbackPain) await fetchScheduleSuggestion(dateStr);
+      if (!wasEditing && hadPain === true) await fetchScheduleSuggestion(dateStr);
     } catch { showError('Could not submit feedback. Please try again.'); }
     finally { setSubmittingFeedback(false); }
   };
@@ -669,6 +704,8 @@ const SchedulePage = () => {
   const allFocuses = schedule.program_list ? [...new Set(schedule.program_list.flatMap((p) => p.focus))] : [];
   const suggestionMeta = suggestion ? (ADJUSTMENT_META[suggestion.adjustment] ?? ADJUSTMENT_META.none) : null;
   const isPainSuggestion = suggestion?.adjustment === 'pain' || (suggestion?.pain_reported && (suggestion?.recovery_options?.length ?? 0) > 0);
+  const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+  const isToday = workoutDetail?.date === todayStr;
 
   return (
     <ProtectedRoute>
@@ -795,40 +832,73 @@ const SchedulePage = () => {
                   <div className="week-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <h4>{weekRangeLabel(week)}</h4>
+                      {hasChanges && (
+                        <span style={{ background: '#1d4ed8', color: '#bfdbfe', borderRadius: '6px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                          Adjusted
+                        </span>
+                      )}
                     </div>
                     <span className="week-dates">{formatDateLong(week[0].date)} – {formatDateLong(week[week.length - 1].date)}</span>
                   </div>
                   <div className="week-grid">
                     {week.map((event) => {
+                      const isInRange =
+                        event.date >= schedule.start_date &&
+                        (!schedule.end_date || event.date <= schedule.end_date);
+
                       return (
-                        <div key={event.date} className={`calendar-day ${event.section_type === 'rest' ? 'rest-day' : 'workout-day'} ${selectedDate === event.date ? 'selected' : ''}`} onClick={() => handleDateClick(event)}>
-                          <div className="day-header"><span className="day-name">{event.day.slice(0, 3).toUpperCase()}</span><span className="day-date">{parseLocalDate(event.date).getDate()}</span></div>
-                          <div className="day-content">
-                            {event.section_type === 'rest' ? (
-                              <div className="rest-indicator"><span className="rest-icon">😴</span><span className="rest-text">Rest Day</span></div>
-                            ) : (
-                              <div className="workout-indicator">
-                                <span className="workout-icon">🏋️</span>
-                                {event.sections?.length > 0 && (
-                                  <div className="workout-programs-table">
-                                    {event.sections.map((section, idx) => (
-                                      <div key={idx} className="program-row">
-                                        <div className="program-name-col">
-                                          <div className="program-name-line"><a href={`/program/${section.program_id}`} className="program-link" onClick={(e) => { e.stopPropagation(); router.push(`/program/${section.program_id}`); }}>{section.program_name}</a></div>
-                                          <div className="program-focus-line">
-                                            <span className="program-focus-text">{typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}</span>
-                                            {event.session_status === 'completed' && <span className="program-complete-badge">✅ Complete</span>}
-                                            {event.session_status === 'in_progress' && <span className="program-inprogress-badge">In Progress</span>}
+                        <div
+                          key={event.date}
+                          className={`calendar-day ${event.section_type === 'rest' ? 'rest-day' : 'workout-day'} ${selectedDate === event.date ? 'selected' : ''} ${!isInRange ? 'outside-range' : ''}`}
+                          onClick={isInRange ? () => handleDateClick(event) : undefined}
+                        >
+                          <div className="day-header">
+                            <span className="day-name">{event.day.slice(0, 3).toUpperCase()}</span>
+                            <span className="day-date">{parseLocalDate(event.date).getDate()}</span>
+                          </div>
+                          {!isInRange ? (
+                            <div className="day-content">
+                              <div className="outside-schedule-indicator">
+                                <span>—</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="day-content">
+                              {event.section_type === 'rest' ? (
+                                <div className="rest-indicator">
+                                  <span className="rest-icon">😴</span>
+                                  <span className="rest-text">Rest Day</span>
+                                </div>
+                              ) : (
+                                <div className="workout-indicator">
+                                  <span className="workout-icon">🏋️</span>
+                                  {event.sections?.length > 0 && (
+                                    <div className="workout-programs-table">
+                                      {event.sections.map((section, idx) => (
+                                        <div key={idx} className="program-row">
+                                          <div className="program-name-col">
+                                            <div className="program-name-line">
+                                              <a href={`/program/${section.program_id}`} className="program-link" onClick={(e) => { e.stopPropagation(); router.push(`/program/${section.program_id}`); }}>
+                                                {section.program_name}
+                                              </a>
+                                            </div>
+                                            <div className="program-focus-line">
+                                              <span className="program-focus-text">
+                                                {typeof section.focus === 'string' ? section.focus : Array.isArray(section.focus) ? (section.focus as string[]).slice(0, 2).join(', ') : 'N/A'}
+                                              </span>
+                                              {event.session_status === 'completed' && <span className="program-complete-badge">Complete</span>}
+                                              {event.session_status === 'in_progress' && <span className="program-inprogress-badge">In Progress</span>}
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="total-count">{event.exercise_count} total</div>
-                              </div>
-                            )}
-                          </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="total-count">{event.exercise_count} total</div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -836,6 +906,7 @@ const SchedulePage = () => {
                 </div>
               );
             })}
+
           </div>
 
           {/* ── Workout Detail Modal ─────────────────────────────────────── */}
@@ -875,7 +946,7 @@ const SchedulePage = () => {
                             {workoutDetail.feedback.fatigue_level && <span>😓 Fatigue: <strong>{workoutDetail.feedback.fatigue_level}/5</strong></span>}
                             {workoutDetail.feedback.pain_reported && <span>⚠️ <strong>Pain reported</strong></span>}
                           </div>
-                          {workoutDetail.feedback.notes && <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{workoutDetail.feedback.notes}"</p>}
+                          {workoutDetail.feedback.notes && <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>&quot;{workoutDetail.feedback.notes}&quot;</p>}
                         </div>
                       )}
                       {showFeedbackForm && (
@@ -909,10 +980,46 @@ const SchedulePage = () => {
                             <button onClick={()=>undoCompleteSession(workoutDetail.date)} disabled={undoingComplete} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', border: '1.5px solid var(--border-medium)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 500, fontSize: '0.82rem', alignSelf: 'flex-start' }}>{undoingComplete?'...':'↩ Undo Completion'}</button>
                           )}
                           {!workoutDetail.session_status && (
-                            <button className="btn-start-workout" onClick={async()=>{try{await startSession(workoutDetail.date);showSuccess('Workout started!');await fetchSchedule();await fetchWorkoutForDate(workoutDetail.date);}catch{showError('Could not start workout.');}}}>▶️ Start Workout</button>
+                            <>
+                              <button
+                                className="btn-start-workout"
+                                disabled={!isToday}
+                                title={!isToday ? 'You can only start a workout on its scheduled day' : undefined}
+                                onClick={async () => {
+                                  try {
+                                    await startSession(workoutDetail.date);
+                                    showSuccess('Workout started!');
+                                    await fetchSchedule();
+                                    await fetchWorkoutForDate(workoutDetail.date);
+                                  } catch { showError('Could not start workout.'); }
+                                }}
+                              >
+                                Start Workout
+                              </button>
+                              {!isToday && (
+                                <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                                  📅 Available on {parseLocalDate(workoutDetail.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </p>
+                              )}
+                            </>
                           )}
                           {workoutDetail.session_status === 'in_progress' && (
-                            <button className="btn-complete-workout" onClick={async()=>{try{await completeSession(workoutDetail.date);showSuccess('Workout completed! 🎉');await fetchSchedule();await fetchWorkoutForDate(workoutDetail.date);setShowFeedbackForm(true);}catch{showError('Could not complete workout.');}}}>✅ Complete</button>
+                            <button
+                              className="btn-complete-workout"
+                              disabled={!isToday}
+                              title={!isToday ? 'You can only complete a workout on its scheduled day' : undefined}
+                              onClick={async () => {
+                                try {
+                                  await completeSession(workoutDetail.date);
+                                  showSuccess('Workout completed! 🎉');
+                                  await fetchSchedule();
+                                  await fetchWorkoutForDate(workoutDetail.date);
+                                  setShowFeedbackForm(true);
+                                } catch { showError('Could not complete workout.'); }
+                              }}
+                            >
+                              ✅ Complete
+                            </button>
                           )}
                         </div>
                       )}
@@ -922,6 +1029,7 @@ const SchedulePage = () => {
               </div>
             </div>
           )}
+
 
           {/* ── Suggestion / Pain Recovery Modal ────────────────────────── */}
           {showSuggestionModal && suggestion && suggestionMeta && (
