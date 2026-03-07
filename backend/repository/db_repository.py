@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from .base import BaseRepository
 
-from .models import (
+from api.models import (
     UserProfile,
     TrainerProfile,
     WorkoutPlan,
@@ -15,7 +15,7 @@ from .models import (
     WorkoutSession,
     WorkoutFeedback,
 )
-from .serializers import (
+from api.serializers import (
     UserSerializer,
     UserProfileSerializer,
     TrainerProfileSerializer,
@@ -48,6 +48,20 @@ class DBRepository(BaseRepository):
         return UserSerializer(user).data
 
     # ── Profiles ──────────────────────────────────────────────────────────
+    
+    def update_trainer_profile(self, user_id, data):
+        profile = TrainerProfile.objects.get(user_id=user_id)
+        serializer = TrainerProfileSerializer(profile, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return serializer.data
+
+    def update_user_profile(self, user_id, data):
+        profile = UserProfile.objects.get(user_id=user_id)
+        serializer = UserProfileSerializer(profile, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return serializer.data
 
     def get_user_profile(self, user_id):
         return UserProfile.objects.filter(user_id=user_id).first()

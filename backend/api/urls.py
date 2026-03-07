@@ -95,4 +95,7 @@ urlpatterns = [
     path('sessions/undo/<str:date_str>/',     views.undo_workout_session,     name='undo-session'),
     path('sessions/history/',                 views.workout_history,          name='session-history'),
     path('sessions/feedback/<str:date_str>/', views.workout_feedback,         name='session-feedback'),
+    
+    # Other
+    path('dashboard/summary/', views.dashboard_summary, name='dashboard-summary'),
 ]

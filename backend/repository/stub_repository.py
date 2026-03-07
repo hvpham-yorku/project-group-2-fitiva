@@ -378,6 +378,30 @@ class StubRepository(BaseRepository):
 
     # ── Profiles ──────────────────────────────────────────────────────────
 
+    def update_trainer_profile(self, user_id, data):
+        profile = _trainer_profile_by_user(user_id)
+        if not profile:
+            return None
+        allowed = [
+            "bio", "years_of_experience", "specialty_strength",
+            "specialty_cardio", "specialty_flexibility",
+            "specialty_sports", "specialty_rehabilitation", "certifications"
+        ]
+        for key in allowed:
+            if key in data:
+                profile[key] = data[key]
+        return profile
+
+    def update_user_profile(self, user_id, data):
+        profile = _profile_by_user(user_id)
+        if not profile:
+            return None
+        allowed = ["age", "experience_level", "training_location", "fitness_focus"]
+        for key in allowed:
+            if key in data:
+                profile[key] = data[key]
+        return profile
+
     def get_user_profile(self, user_id):
         return _profile_by_user(user_id)
 
@@ -410,6 +434,8 @@ class StubRepository(BaseRepository):
             "user_profile": user_profile,
             "trainer_profile": trainer_profile,
         }
+        
+        
 
     # ── Programs ──────────────────────────────────────────────────────────
 

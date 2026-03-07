@@ -1,6 +1,7 @@
-# Switch between real DB and stub by changing this one line:
-from .repository import Repository; db = Repository()
-# from .stub_repository import StubRepository; db = StubRepository()
+# The database source is controlled by repository/__init__.py
+# Switch between real DB and stub by changing ONE line there.
+# By default, using: DBRepository (real MySQL that loads seed data when running docker)
+from repository import Repository; db = Repository()
 
 import os
 from urllib.parse import urlencode
@@ -283,19 +284,17 @@ def create_profile_view(request):
 @api_view(["GET", "PUT"])
 @permission_classes([IsAuthenticated])
 def profile_me_view(request):
-    try:
-        profile = request.user.profile
-    except UserProfile.DoesNotExist:
-        return Response({"detail": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "GET":
-        return Response(UserProfileSerializer(profile).data, status=status.HTTP_200_OK)
-    serializer = UserProfileSerializer(profile, data=request.data, partial=True)
-    try:
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(UserProfileSerializer(profile).data, status=status.HTTP_200_OK)
-    except ValidationError as e:
-        return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
+        profile = db.get_user_profile(request.user.id)
+        if not profile:
+            return Response({"detail": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(profile, status=status.HTTP_200_OK)
+
+    # PUT
+    updated = db.update_user_profile(request.user.id, request.data)
+    if not updated:
+        return Response({"detail": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(updated, status=status.HTTP_200_OK)
 
 
 # ============================================================================
@@ -305,42 +304,10 @@ def profile_me_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_public_profile(request, user_id):
-    try:
-        user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
+    profile = db.get_public_profile(user_id, requesting_user_id=request.user.id)
+    if not profile:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-    is_owner = request.user.id == user.id
-    user_profile = None
-    try:
-        profile = user.profile
-        user_profile = {
-            "age": profile.age,
-            "experience_level": profile.experience_level,
-            "training_location": profile.training_location,
-            "fitness_focus": profile.fitness_focus,
-        }
-    except UserProfile.DoesNotExist:
-        pass
-    trainer_profile = None
-    if user.is_trainer:
-        try:
-            trainer_profile = TrainerProfileSerializer(user.trainer_profile).data
-        except TrainerProfile.DoesNotExist:
-            pass
-    return Response(
-        {
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email if is_owner else None,
-            "is_trainer": user.is_trainer,
-            "is_owner": is_owner,
-            "user_profile": user_profile,
-            "trainer_profile": trainer_profile,
-        },
-        status=status.HTTP_200_OK,
-    )
+    return Response(profile, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -375,17 +342,11 @@ def update_trainer_profile(request):
             {"detail": "Only trainers can update trainer profiles"},
             status=status.HTTP_403_FORBIDDEN,
         )
-    try:
-        trainer_profile = request.user.trainer_profile
-    except TrainerProfile.DoesNotExist:
+    updated = db.update_trainer_profile(request.user.id, request.data)
+    if not updated:
         return Response({"detail": "Trainer profile not found"}, status=status.HTTP_404_NOT_FOUND)
-    serializer = TrainerProfileSerializer(trainer_profile, data=request.data, partial=True)
-    try:
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    except ValidationError as e:
-        return Response({"errors": format_validation_errors(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(updated, status=status.HTTP_200_OK)
+
 
 
 # ============================================================================
@@ -1140,14 +1101,7 @@ def _analyze_feedback(user):
             recent_feedback.filter(pain_reported=True).order_by('-session__date').first()
         )
         if pain_feedback:
-            # Use isoweekday()-based lookup (Monday=1 ... Sunday=7) instead of
-            # strftime('%A').lower() which can be affected by locale/timezone settings
-            # and produce the wrong day name (e.g. "wednesday" for a monday session).
-            weekday_to_name = {
-                1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday',
-                5: 'friday', 6: 'saturday', 7: 'sunday',
-            }
-            pain_day = weekday_to_name[pain_feedback.session.date.isoweekday()]
+            pain_day = DAYS_OF_WEEK[pain_feedback.session.date.weekday()]
             # Also store the raw ISO date so the frontend can re-derive pain_day
             # client-side using parseLocalDate (zero timezone offset)
             pain_session_date = pain_feedback.session.date.isoformat()
@@ -1521,4 +1475,32 @@ def trainer_program_feedback(request, program_id):
         "total_responses": total, "avg_difficulty": avg_difficulty,
         "avg_fatigue": avg_fatigue, "pain_reported_count": pain_count,
         "weekly_trends": weekly_trends, "entries": entries,
+    }, status=status.HTTP_200_OK)
+    
+# ============================================================================
+# OTHER VIEWS
+# ============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_summary(request):
+    sessions = WorkoutSession.objects.filter(
+        user=request.user,
+        is_completed=True
+    )
+    total_workouts = sessions.count()
+    total_time = sum(s.duration_minutes or 0 for s in sessions)
+
+    chart_data = [
+        {
+            "date": s.date.isoformat(),
+            "duration_minutes": s.duration_minutes or 0
+        }
+        for s in sessions.order_by('date')
+    ]
+
+    return Response({
+        "total_workouts": total_workouts,
+        "total_time_trained": total_time,
+        "chart_data": chart_data,
     }, status=status.HTTP_200_OK)
