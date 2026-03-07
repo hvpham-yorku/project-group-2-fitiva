@@ -12,6 +12,9 @@ Make sure the following are installed on your machine before starting:
 
 ## Step 1: Clone the Repository
 
+> If you downloaded the ZIP from the GitHub tag, skip this step.
+> Just unzip the folder and open a terminal inside it.
+
 1. Go to the project's GitHub page
 2. Click the green "Code" button
 3. Copy the HTTPS URL
@@ -35,7 +38,7 @@ cd backend
 ## Step 3: Environment Configuration
 
 No setup required. All environment variables are pre-configured
-in docker-compose.yml at the project root, including:
+in `docker-compose.yml` inside the `backend/` folder, including:
 - MySQL database credentials
 - Django debug settings
 - Frontend API URL (http://localhost:8000)
@@ -49,7 +52,8 @@ Simply proceed to Step 4.
 
 ## Step 4: Build and Start the Containers
 
-Run the following command from inside the backend folder:
+Run the following command from inside the `backend/` folder
+(this is where `docker-compose.yml` lives for this project):
 
 ```bash
 docker compose up --build -d
@@ -234,7 +238,50 @@ So swapping the one line in `repository/__init__.py` is all that
 is needed to switch the entire application between the real
 database and the stub — no other files need to be touched.
 
-To verify both implementations share the same interface, run:
+### Switching to Stub
+
+1. In `backend/repository/__init__.py`, comment out the DB line and uncomment the stub line:
+```python
+# from .db_repository import DBRepository as Repository
+from .stub_repository import StubRepository as Repository
+```
+
+2. Clear cache and rebuild:
+```bash
+find . -type d -name __pycache__ -exec rm -rf {} +
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Switching Back to Real DB
+
+1. Revert the line in `backend/repository/__init__.py`:
+```python
+from .db_repository import DBRepository as Repository
+# from .stub_repository import StubRepository as Repository
+```
+
+2. Clear cache and rebuild:
+```bash
+find . -type d -name __pycache__ -exec rm -rf {} +
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Verify Which Repository is Active
+
+```bash
+docker compose exec backend python manage.py shell -c "
+from repository import Repository
+print(Repository.__name__)
+"
+```
+
+- Should print `StubRepository` or `DBRepository` depending on your current setting.
+
+### Verify Both Implementations Share the Same Interface
 
 ```bash
 docker compose exec backend python manage.py shell -c "
